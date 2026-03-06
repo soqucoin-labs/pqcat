@@ -1,0 +1,35 @@
+# Binaries
+pqcat
+pqcat-airgap
+pqcat-pro
+pqcat-*-amd64
+pqcat-*-arm64
+*.exe
+
+# Database
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Build artifacts
+SHA256SUMS
+*.cdx.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage.out
+*.test
+
+# Config (local, may contain secrets)
+pqcat.yaml
