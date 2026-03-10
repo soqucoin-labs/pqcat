@@ -193,7 +193,7 @@ organization: "Sample Agency"
 environment: "production"            # production | staging | development
 
 # Compliance framework (determines urgency multipliers and deadlines)
-framework: "fisma"                   # fisma | fedramp | dod | nist | cnsa | custom
+framework: "fisma"                   # nsm10 | cnsa2 | sp800131a | fisma | fedramp | pci | sox | hipaa | nydfs | swift | cmmc
 
 # Criticality overrides (target-specific risk weighting)
 criticality:
@@ -458,11 +458,17 @@ The CBOH is the branded deliverable — a scored assessment that summarizes:
 
 | Framework | `--framework` | Scope |
 |---|---|---|
+| CNSA 2.0 | `cnsa2` | NSA Commercial National Security Algorithm Suite 2.0 |
+| NSM-10 | `nsm10` | National Security Memorandum — inventory and migration plans |
 | FISMA | `fisma` | Federal agencies (NIST 800-53) |
 | FedRAMP | `fedramp` | Cloud service providers |
-| DoD | `dod` | Department of Defense (CNSA 2.0) |
-| NIST | `nist` | General NIST guidance (800-131A) |
-| CNSA | `cnsa` | NSA CNSA 2.0 timeline compliance |
+| NIST SP 800-131A | `sp800131a` | Cryptographic algorithm deprecation guidance |
+| CMMC | `cmmc` | Cybersecurity Maturity Model Certification (DoD supply chain) |
+| PCI DSS | `pci` | Payment Card Industry Data Security Standard |
+| SOX | `sox` | Sarbanes-Oxley Act — financial reporting controls |
+| HIPAA | `hipaa` | Health Insurance Portability and Accountability Act |
+| NYDFS | `nydfs` | NY DFS cybersecurity regulation |
+| SWIFT CSP | `swift` | SWIFT Customer Security Programme |
 
 ### 11.2 Zone Classification
 
@@ -836,22 +842,22 @@ stateDiagram-v2
 
 **API Route Registration:**
 
-| Route | Handler | Method | Min Role |
+| Route | Method | Min Role | Description |
 |---|---|---|---|
-| `/` | `dashboardHandler` | GET | (none — login required in SPA) |
-| `/api/health` | `healthHandler` | GET | (none) |
-| `/api/auth/login` | `handleAuthLogin` | POST | (none) |
-| `/api/auth/logout` | `handleAuthLogout` | POST | (any) |
-| `/api/auth/me` | `handleAuthMe` | GET | (any) |
-| `/api/auth/password` | `handleAuthChangePassword` | POST | (any) |
-| `/api/stats` | `handleStats` | GET | viewer |
-| `/api/scans` | `handleScans` | GET | viewer |
-| `/api/scan` | `handleScan` | POST | analyst |
-| `/api/scans/{id}` | `handleScanDetail` | GET | viewer |
-| `/api/users` | `handleUsers` | GET/POST/PUT/DELETE | admin |
-| `/api/audit-log` | `handleAuditLog` | GET | admin |
-| `/api/audit-log/verify` | `handleAuditVerify` | GET | admin |
-| `/metrics` | `handleMetrics` | GET | admin |
+| `/` | GET | (none — login required in SPA) | Web dashboard |
+| `/api/health` | GET | (none) | Health check |
+| `/api/auth/login` | POST | (none) | Session authentication |
+| `/api/auth/logout` | POST | (any) | End session |
+| `/api/auth/me` | GET | (any) | Current user info |
+| `/api/auth/password` | POST | (any) | Change own password |
+| `/api/stats` | GET | viewer | Dashboard aggregate stats |
+| `/api/scans` | GET | viewer | List recent scans |
+| `/api/scan` | POST | analyst | Trigger a new scan |
+| `/api/scans/{id}` | GET | viewer | Scan asset details |
+| `/api/users` | GET/POST/PUT/DELETE | admin | User management |
+| `/api/audit-log` | GET | admin | View audit log |
+| `/api/audit-log/verify` | GET | admin | Verify HMAC chain integrity |
+| `/metrics` | GET | admin | Prometheus metrics |
 
 > **Note:** All API endpoints require authentication via session token or API key. Only `/api/health` and `/api/auth/login` are unauthenticated.
 

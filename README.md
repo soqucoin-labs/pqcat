@@ -124,11 +124,26 @@ The **scanner** (this repository) is open source under Apache 2.0. The **complia
 
 ## Compliance Frameworks
 
-- **FISMA** — NIST 800-53 federal agency compliance
-- **FedRAMP** — Cloud service provider authorization
-- **DoD** — CNSA 2.0 Department of Defense
-- **NIST** — General 800-131A guidance
-- **CNSA** — NSA Commercial National Security Algorithm Suite 2.0
+### Federal / Defense
+
+| Framework | `--framework` | Scope |
+|-----------|---------------|-------|
+| **CNSA 2.0** | `cnsa2` | NSA Commercial National Security Algorithm Suite 2.0 |
+| **NSM-10** | `nsm10` | National Security Memorandum — inventory and migration plans |
+| **FISMA** | `fisma` | NIST 800-53 federal agency compliance |
+| **FedRAMP** | `fedramp` | Cloud service provider authorization |
+| **NIST SP 800-131A** | `sp800131a` | Cryptographic algorithm deprecation guidance |
+| **CMMC** | `cmmc` | Cybersecurity Maturity Model Certification (DoD supply chain) |
+
+### Financial / Healthcare
+
+| Framework | `--framework` | Scope |
+|-----------|---------------|-------|
+| **PCI DSS** | `pci` | Payment Card Industry Data Security Standard |
+| **SOX** | `sox` | Sarbanes-Oxley Act — financial reporting controls |
+| **HIPAA** | `hipaa` | Health Insurance Portability and Accountability Act |
+| **NYDFS** | `nydfs` | NY Department of Financial Services cybersecurity regulation |
+| **SWIFT CSP** | `swift` | SWIFT Customer Security Programme |
 
 ## License
 
