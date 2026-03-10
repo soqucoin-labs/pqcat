@@ -61,8 +61,8 @@ func ScanAggregate(opts AggregateOptions) (*models.ScanResult, error) {
 	start := time.Now()
 
 	combined := &models.ScanResult{
-		Target:   "aggregate",
-		ScanType: "aggregate",
+		Target:    "aggregate",
+		ScanType:  "aggregate",
 		Timestamp: start,
 	}
 

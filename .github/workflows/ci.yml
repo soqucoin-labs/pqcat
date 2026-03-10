@@ -1,0 +1,39 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Build scanner
+        run: go build -ldflags "-s -w" -o pqcat ./cmd/pqcat/
+
+      - name: Run tests
+        run: go test ./... -v -count=1
+
+      - name: Verify binary
+        run: ./pqcat version
+
+      - name: Verify static binary (Linux only)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          file pqcat
+          ldd pqcat 2>&1 | grep -q "not a dynamic executable" && echo "✅ Static binary" || echo "⚠️ Dynamic binary"

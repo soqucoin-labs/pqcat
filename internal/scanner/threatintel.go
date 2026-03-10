@@ -273,4 +273,3 @@ func PrintThreatIntelTerminal(intel *ThreatIntel) {
 	fmt.Println("════════════════════════════════════════════════════════════")
 	fmt.Println()
 }
-

@@ -73,10 +73,13 @@ type DatabaseConfig struct {
 
 // ServerConfig configures the REST API server (Pro edition only).
 type ServerConfig struct {
-	Listen   string `yaml:"listen,omitempty"` // e.g., "localhost:8443"
-	TLS      bool   `yaml:"tls,omitempty"`
-	CertFile string `yaml:"cert_file,omitempty"`
-	KeyFile  string `yaml:"key_file,omitempty"`
+	Listen     string `yaml:"listen,omitempty"` // e.g., "localhost:8443"
+	TLS        bool   `yaml:"tls,omitempty"`
+	CertFile   string `yaml:"cert_file,omitempty"`
+	KeyFile    string `yaml:"key_file,omitempty"`
+	APIKey     string `yaml:"api_key,omitempty"`     // Required for API access when set
+	RateLimit  int    `yaml:"rate_limit,omitempty"`  // Requests per minute per IP (0=unlimited)
+	CORSOrigin string `yaml:"cors_origin,omitempty"` // Allowed CORS origin ("*" for any)
 }
 
 // DefaultConfig returns a Config with sensible defaults.
@@ -242,6 +245,15 @@ func mergeConfig(dst, src *Config) {
 	if src.Server.KeyFile != "" {
 		dst.Server.KeyFile = src.Server.KeyFile
 	}
+	if src.Server.APIKey != "" {
+		dst.Server.APIKey = src.Server.APIKey
+	}
+	if src.Server.RateLimit > 0 {
+		dst.Server.RateLimit = src.Server.RateLimit
+	}
+	if src.Server.CORSOrigin != "" {
+		dst.Server.CORSOrigin = src.Server.CORSOrigin
+	}
 }
 
 // applyEnvOverrides reads PQCAT_* environment variables.
@@ -271,6 +283,27 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if v := os.Getenv("PQCAT_LISTEN"); v != "" {
 		cfg.Server.Listen = v
+	}
+	if v := os.Getenv("PQCAT_API_KEY"); v != "" {
+		cfg.Server.APIKey = v
+	}
+	if v := os.Getenv("PQCAT_RATE_LIMIT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Server.RateLimit = n
+		}
+	}
+	if v := os.Getenv("PQCAT_CORS_ORIGIN"); v != "" {
+		cfg.Server.CORSOrigin = v
+	}
+	// Sensitive values — prefer env vars over plaintext config files
+	if v := os.Getenv("PQCAT_SIEM_TOKEN"); v != "" {
+		cfg.SIEM.Token = v
+	}
+	if v := os.Getenv("PQCAT_TLS_CERT"); v != "" {
+		cfg.Server.CertFile = v
+	}
+	if v := os.Getenv("PQCAT_TLS_KEY"); v != "" {
+		cfg.Server.KeyFile = v
 	}
 }
 

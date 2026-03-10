@@ -15,15 +15,17 @@ type ScanResult struct {
 
 // CryptoAsset represents a single cryptographic asset discovered during scanning.
 type CryptoAsset struct {
-	ID          string            `json:"id"`
-	Type        AssetType         `json:"type"`
-	Algorithm   string            `json:"algorithm"`
-	KeySize     int               `json:"key_size,omitempty"`
-	Zone        Zone              `json:"zone"`
-	Location    string            `json:"location"`
-	Details     map[string]string `json:"details,omitempty"`
-	Expiry      *time.Time        `json:"expiry,omitempty"`
-	Criticality Criticality       `json:"criticality"`
+	ID             string            `json:"id"`
+	Type           AssetType         `json:"type"`
+	Algorithm      string            `json:"algorithm"`
+	KeySize        int               `json:"key_size,omitempty"`
+	Zone           Zone              `json:"zone"`
+	Location       string            `json:"location"`
+	Details        map[string]string `json:"details,omitempty"`
+	Expiry         *time.Time        `json:"expiry,omitempty"`
+	Criticality    Criticality       `json:"criticality"`
+	DataRetention  time.Duration     `json:"data_retention,omitempty"`  // CCE: retention period for HNDL
+	HNDLMultiplier float64           `json:"hndl_multiplier,omitempty"` // CCE: computed HNDL weight
 }
 
 // Zone represents the quantum vulnerability classification.
@@ -60,12 +62,24 @@ const (
 
 // ComplianceScore represents the normalized compliance assessment.
 type ComplianceScore struct {
-	Overall      float64             `json:"overall"`   // 0-100 normalized
-	Framework    string              `json:"framework"` // "nsm10", "cnsa2", "sp800131a"
-	ZoneCounts   map[Zone]int        `json:"zone_counts"`
-	TotalAssets  int                 `json:"total_assets"`
-	TopActions   []MigrationAction   `json:"top_actions"`
-	NextDeadline *ComplianceDeadline `json:"next_deadline,omitempty"`
+	Overall          float64             `json:"overall"`   // 0-100 normalized
+	Framework        string              `json:"framework"` // "nsm10", "cnsa2", "sp800131a"
+	ZoneCounts       map[Zone]int        `json:"zone_counts"`
+	TotalAssets      int                 `json:"total_assets"`
+	TopActions       []MigrationAction   `json:"top_actions"`
+	NextDeadline     *ComplianceDeadline `json:"next_deadline,omitempty"`
+	ConfidentialMode string              `json:"confidential_mode,omitempty"` // CCE: "full", "anonymized", "aggregate"
+	FrameworkResults []FrameworkResult   `json:"framework_results,omitempty"` // CCE: per-framework detail
+}
+
+// FrameworkResult holds per-framework assessment output.
+type FrameworkResult struct {
+	Framework  string `json:"framework"`
+	Control    string `json:"control"` // e.g. "§3.6", "SC.L2-3.13.11"
+	Status     string `json:"status"`  // "PASS", "FAIL", "PARTIAL"
+	Zone       Zone   `json:"zone"`
+	Rationale  string `json:"rationale"`
+	IsAdvisory bool   `json:"is_advisory"` // true for SOX, SWIFT
 }
 
 // MigrationAction represents a prioritized remediation step.
@@ -87,11 +101,22 @@ type ComplianceDeadline struct {
 
 // Report is the top-level structure for the Crypto Bill of Health.
 type Report struct {
-	Title     string            `json:"title"`
-	Agency    string            `json:"agency"`
-	ScanDate  time.Time         `json:"scan_date"`
-	Version   string            `json:"version"`
-	Results   []ScanResult      `json:"results"`
-	Scores    []ComplianceScore `json:"scores"`
-	Generated time.Time         `json:"generated"`
+	Title            string            `json:"title"`
+	Agency           string            `json:"agency"`
+	ScanDate         time.Time         `json:"scan_date"`
+	Version          string            `json:"version"`
+	Results          []ScanResult      `json:"results"`
+	Scores           []ComplianceScore `json:"scores"`
+	Generated        time.Time         `json:"generated"`
+	ScoringVersion   string            `json:"scoring_version"`             // CCE: "1.0", "1.1-hndl" (GAP-02)
+	EngineVersion    string            `json:"engine_version"`              // CCE: PQCAT binary version
+	Environment      string            `json:"environment,omitempty"`       // CCE: production/staging/dev (UX-BLIND-03)
+	RetentionSource  string            `json:"retention_source,omitempty"`  // CCE: "user_provided"/"policy_file" (GAP-04)
+	ScanCoverage     float64           `json:"scan_coverage,omitempty"`     // CCE: reachable/attempted (GAP-03)
+	Disclaimer       string            `json:"disclaimer"`                  // CCE: legal disclaimer (GAP-07)
+	ProofHash        string            `json:"proof_hash,omitempty"`        // Phase 2: SHA-384 of ZK proof
+	SealSig          string            `json:"seal_sig,omitempty"`          // CCE: Dilithium report seal (hex)
+	Organization     string            `json:"organization,omitempty"`      // CCE Phase 2: customer name (UX-BLIND-05)
+	OrganizationLogo string            `json:"organization_logo,omitempty"` // CCE Phase 2: logo path (UX-BLIND-05)
+	CustomTitle      string            `json:"custom_title,omitempty"`      // CCE Phase 2: report title override (UX-BLIND-05)
 }
