@@ -17,12 +17,14 @@ This Standard Operations Procedure (SOP) defines the installation, configuration
 
 This SOP applies to:
 
-- **PQCAT Enclave** (air-gapped edition): Federal default for SCIF, IL4/IL5, and classified environments.
-- **PQCAT Pro** (connected edition): Enterprise edition for FedRAMP cloud and NIPR environments.
+- **PQCAT Enclave** (air-gapped edition): Default for SCIF, IL4/IL5, classified networks, and any environment requiring zero outbound connectivity.
+- **PQCAT Pro** (connected edition): Enterprise edition for cloud, on-premise, and hybrid environments across federal, defense, financial, and healthcare sectors.
 
-Both editions are built from the same codebase using Go build tags. The Enclave edition contains zero outbound network code beyond scan targets. The Pro edition adds a REST API, embedded web dashboard, and live threat intelligence feed.
+Both editions are built from the same codebase using Go build tags. The Enclave edition contains zero outbound network code beyond scan targets. The Pro edition adds RBAC, session authentication, a REST API, embedded web dashboard, HMAC audit logging, Prometheus metrics, and live threat intelligence feed.
 
 ## 3. References
+
+### Federal / Defense
 
 | Reference | Description |
 |---|---|
@@ -32,6 +34,22 @@ Both editions are built from the same codebase using Go build tags. The Enclave 
 | CISA PQC Guidance (2024) | Post-Quantum Cryptography Readiness for Federal Agencies |
 | NIST FIPS 203/204/205 | ML-KEM, ML-DSA, SLH-DSA Standards |
 | NIST SP 800-53 Rev. 5 | Security and Privacy Controls for Information Systems |
+| CMMC 2.0 (32 CFR Part 170) | Cybersecurity Maturity Model Certification — DoD supply chain |
+
+### Financial / Healthcare
+
+| Reference | Description |
+|---|---|
+| PCI DSS v4.0 | Payment Card Industry Data Security Standard |
+| SOX (Sarbanes-Oxley Act) | Section 404 — IT controls for financial reporting integrity |
+| HIPAA Security Rule | 45 CFR §164.312 — Encryption and integrity controls for ePHI |
+| NYDFS 23 NYCRR 500 | NY Department of Financial Services cybersecurity regulation |
+| SWIFT CSP v2024 | SWIFT Customer Security Programme — mandatory controls for financial messaging |
+
+### General
+
+| Reference | Description |
+|---|---|
 | CycloneDX 1.5 | OWASP Software Bill of Materials Standard |
 
 ## 4. Definitions
@@ -78,21 +96,25 @@ Both editions are built from the same codebase using Go build tags. The Enclave 
 | TCP listeners | ✗ | ✓ |
 | REST API (localhost:8443) | ✗ | ✓ |
 | Embedded web dashboard | ✗ | ✓ |
+| Role-based access control (RBAC) | ✗ | ✓ |
+| Session authentication + audit log | ✗ | ✓ |
+| ML-DSA-44 report seals (FIPS 204) | ✗ | ✓ |
+| Prometheus observability (`/metrics`) | ✗ | ✓ |
 | Live threat intelligence feed | ✗ | ✓ |
 | Auto-update from sidecar | ✗ | ✓ |
 
 ### 5.3 Open-Core Model
 
-| Component | License | Repository |
+| Component | License | Source |
 |---|---|---|
-| Scanner modules (9) | Apache 2.0 | `github.com/soqucoin-labs/pqcat` (public) |
-| Algorithm classifier | Apache 2.0 | `github.com/soqucoin-labs/pqcat` (public) |
-| Data models | Apache 2.0 | `github.com/soqucoin-labs/pqcat` (public) |
-| Config loader | Apache 2.0 | `github.com/soqucoin-labs/pqcat` (public) |
-| Compliance engine | Proprietary | `github.com/soqucoin-labs/pqcat-engine` (private) |
-| Scoring engine | Proprietary | `github.com/soqucoin-labs/pqcat-engine` (private) |
-| Report generators | Proprietary | `github.com/soqucoin-labs/pqcat-engine` (private) |
-| REST API & dashboard | Proprietary | `github.com/soqucoin-labs/pqcat-engine` (private) |
+| Scanner modules (9) | Apache 2.0 | Open source — `github.com/soqucoin-labs/pqcat` |
+| Algorithm classifier | Apache 2.0 | Open source — `github.com/soqucoin-labs/pqcat` |
+| Data models | Apache 2.0 | Open source — `github.com/soqucoin-labs/pqcat` |
+| Config loader | Apache 2.0 | Open source — `github.com/soqucoin-labs/pqcat` |
+| Compliance engine | Proprietary | Licensed separately — contact labs@soqu.org |
+| Scoring engine | Proprietary | Licensed separately — contact labs@soqu.org |
+| Report generators | Proprietary | Licensed separately — contact labs@soqu.org |
+| REST API & dashboard | Proprietary | Licensed separately — contact labs@soqu.org |
 
 ## 6. Installation
 
@@ -110,8 +132,9 @@ Both editions are built from the same codebase using Go build tags. The Enclave 
 ### 6.2 Binary Installation
 
 ```bash
-# Download release binary (example for Linux x86_64)
-curl -LO https://releases.soqucoin.com/pqcat/v1.0.0/pqcat-linux-amd64
+# Download release binary from GitHub Releases
+# https://github.com/soqucoin-labs/pqcat/releases
+curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v1.1.0/pqcat-linux-amd64
 chmod +x pqcat-linux-amd64
 mv pqcat-linux-amd64 /usr/local/bin/pqcat
 
