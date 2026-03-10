@@ -1,7 +1,7 @@
 # PQCAT — Post-Quantum Cryptography Compliance Assessment Tool
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Go](https://img.shields.io/badge/Go-1.21+-00ADD8.svg)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8.svg)](https://go.dev)
 
 **Built by Soqucoin Labs Inc.** — the team that migrated a production blockchain from ECDSA to NIST FIPS 204 (ML-DSA). Not theory — proven implementation.
 
@@ -26,6 +26,10 @@ pqcat scan tls agency.gov --framework fisma --html report.html --save-db
 | Self-contained HTML reports | ✓ | ✓ |
 | SQLite scan history & POA&M | ✓ | ✓ |
 | REST API + web dashboard | — | ✓ |
+| Role-based access control (RBAC) | — | ✓ |
+| User management & audit logging | — | ✓ |
+| Prometheus observability (`/metrics`) | — | ✓ |
+| ML-DSA-44 report seals (FIPS 204) | — | ✓ |
 | Live threat intelligence | — | ✓ |
 
 Both editions are built from this codebase. The Enclave edition compiles with **zero network code** beyond scan targets — guaranteed by the compiler.
@@ -44,6 +48,9 @@ make all
 
 # Terminal dashboard
 ./pqcat dashboard
+
+# Start Pro web dashboard (prints admin password on first run)
+./pqcat-pro serve
 
 # Generate org config
 ./pqcat config init
@@ -74,6 +81,19 @@ make checksums    # SHA-256 integrity manifest
 make release      # Full release package
 ```
 
+## Security
+
+PQCAT Pro includes enterprise-grade security out of the box:
+
+- **RBAC**: Three roles (viewer, analyst, admin) with route-level enforcement
+- **Session Auth**: 256-bit tokens, HttpOnly/Secure/SameSite=Strict cookies, 8h TTL
+- **First-Run Admin**: Cryptographically random password, force-change on first login
+- **Tamper-Proof Audit Log**: HMAC-SHA256 chained entries with integrity verification
+- **ML-DSA-44 Report Seals**: FIPS 204 post-quantum signatures on all reports
+- **Prometheus Metrics**: `/metrics` endpoint for operational observability
+- **Security Headers**: CSP, HSTS, X-Frame-Options, CORS, rate limiting
+- **Env-Only Secrets**: TLS certs, SIEM tokens, audit keys via environment variables
+
 ## Configuration
 
 PQCAT uses YAML with a 6-level precedence chain:
@@ -93,8 +113,10 @@ See [docs/PQCAT-SOP-001.md](docs/PQCAT-SOP-001.md) for the full Standard Operati
 │  9 scanner modules + algorithm classifier + data models       │
 ├── Intelligence Layer ────────────── Proprietary ──────────────┤
 │  Compliance engine + scoring + threat intel                   │
+├── Security Layer ─────────────────────────────────────────────┤
+│  RBAC · Session Auth · HMAC Audit · Rate Limiting · CSP      │
 ├── Delivery Layer ─────────────────────────────────────────────┤
-│  PDF · HTML · JSON · SIEM · TUI · REST API                   │
+│  PDF · HTML · JSON · SIEM · TUI · REST API · Prometheus      │
 └───────────────────────────────────────────────────────────────┘
 ```
 

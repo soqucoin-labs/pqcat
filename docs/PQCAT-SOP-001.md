@@ -346,19 +346,29 @@ Access at `https://localhost:8443` in any modern browser.
 
 ### 8.5 REST API Endpoints (Pro Edition Only)
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/v1/health` | Health check and version info |
-| `GET` | `/api/v1/scans` | List recent scans |
-| `GET` | `/api/v1/scans/{id}` | Get scan details with assets |
-| `POST` | `/api/v1/scans` | Trigger a new scan |
-| `GET` | `/api/v1/trends?target=<host>` | Score trend over time |
+| Method | Endpoint | Min Role | Description |
+|---|---|---|---|
+| `GET` | `/api/health` | (none) | Health check and version info |
+| `GET` | `/api/stats` | viewer | Dashboard aggregate stats |
+| `GET` | `/api/scans` | viewer | List recent scans |
+| `GET` | `/api/scans/{id}` | viewer | Get scan details with assets |
+| `POST` | `/api/scan` | analyst | Trigger a new scan |
+| `GET` | `/api/trend?target=<host>` | viewer | Score trend over time |
+| `POST` | `/api/auth/login` | (none) | Session authentication |
+| `POST` | `/api/auth/logout` | (any) | End session |
+| `GET` | `/api/auth/me` | (any) | Current user info |
+| `POST` | `/api/auth/password` | (any) | Change own password |
+| `GET/POST/PUT/DELETE` | `/api/users` | admin | User management |
+| `GET` | `/api/audit-log` | admin | View audit log |
+| `GET` | `/api/audit-log/verify` | admin | Verify HMAC chain integrity |
+| `GET` | `/metrics` | admin | Prometheus metrics |
 
 **Example: Trigger a Scan via API**
 ```bash
-curl -X POST https://localhost:8443/api/v1/scans \
+curl -X POST https://localhost:8443/api/scan \
   -H "Content-Type: application/json" \
-  -d '{"target": "example.gov", "type": "tls", "framework": "fisma"}'
+  -H "X-PQCAT-Session: <session-token>" \
+  -d '{"target": "example.gov", "scan_type": "tls", "framework": "fisma"}'
 ```
 
 ## 9. Data Management
@@ -536,7 +546,12 @@ The Enclave edition provides compile-time guarantees:
 
 - REST API listens on localhost by default (`:8443`)
 - TLS is configurable via `server.tls`, `server.cert_file`, `server.key_file`
-- No authentication is built into the default configuration — deploy behind an authenticating reverse proxy for multi-user environments
+- **Role-Based Access Control (RBAC)**: Three roles — viewer, analyst, admin — enforced at route level
+- **Session authentication**: 256-bit random tokens, HttpOnly/Secure/SameSite=Strict cookies, 8h TTL
+- **First-run admin**: Random 32-character password auto-generated, force-change on first login
+- **HMAC-chained audit log**: Tamper-proof security event trail with `/api/audit-log/verify` endpoint
+- **Prometheus metrics**: Admin-only `/metrics` endpoint for operational observability
+- Sensitive configuration via environment variables only: `PQCAT_SIEM_TOKEN`, `PQCAT_TLS_CERT`, `PQCAT_TLS_KEY`, `PQCAT_AUDIT_KEY`
 
 ## 14. Troubleshooting
 
@@ -781,6 +796,20 @@ stateDiagram-v2
 | | `due_date` | DATE | |
 | | `status` | TEXT | DEFAULT 'Open' |
 | | `created_at` | DATETIME | DEFAULT CURRENT_TIMESTAMP |
+| `users` | `id` | INTEGER | PRIMARY KEY AUTOINCREMENT |
+| | `username` | TEXT | NOT NULL UNIQUE |
+| | `password_hash` | TEXT | NOT NULL |
+| | `role` | TEXT | NOT NULL (admin/analyst/viewer) |
+| | `enabled` | INTEGER | DEFAULT 1 |
+| | `force_change` | INTEGER | DEFAULT 0 |
+| | `created_at` | DATETIME | DEFAULT CURRENT_TIMESTAMP |
+| `audit_log` | `id` | INTEGER | PRIMARY KEY AUTOINCREMENT |
+| | `action` | TEXT | NOT NULL |
+| | `username` | TEXT | NOT NULL |
+| | `details` | TEXT | |
+| | `ip` | TEXT | |
+| | `integrity_hash` | TEXT | HMAC-SHA256 chain |
+| | `created_at` | DATETIME | DEFAULT CURRENT_TIMESTAMP |
 
 ### A.5 Server Lifecycle (Pro Edition Only)
 
@@ -807,16 +836,24 @@ stateDiagram-v2
 
 **API Route Registration:**
 
-| Route | Handler | Method | Auth Required |
+| Route | Handler | Method | Min Role |
 |---|---|---|---|
-| `/` | `dashboardHandler` | GET | No (local only) |
-| `/api/v1/health` | `healthHandler` | GET | No |
-| `/api/v1/scans` | `scansHandler` | GET | No |
-| `/api/v1/scans` | `scanHandler` (POST) | POST | No |
-| `/api/v1/scans/{id}` | `scanDetailHandler` | GET | No |
-| `/api/v1/trends` | `trendsHandler` | GET | No |
+| `/` | `dashboardHandler` | GET | (none — login required in SPA) |
+| `/api/health` | `healthHandler` | GET | (none) |
+| `/api/auth/login` | `handleAuthLogin` | POST | (none) |
+| `/api/auth/logout` | `handleAuthLogout` | POST | (any) |
+| `/api/auth/me` | `handleAuthMe` | GET | (any) |
+| `/api/auth/password` | `handleAuthChangePassword` | POST | (any) |
+| `/api/stats` | `handleStats` | GET | viewer |
+| `/api/scans` | `handleScans` | GET | viewer |
+| `/api/scan` | `handleScan` | POST | analyst |
+| `/api/scans/{id}` | `handleScanDetail` | GET | viewer |
+| `/api/users` | `handleUsers` | GET/POST/PUT/DELETE | admin |
+| `/api/audit-log` | `handleAuditLog` | GET | admin |
+| `/api/audit-log/verify` | `handleAuditVerify` | GET | admin |
+| `/metrics` | `handleMetrics` | GET | admin |
 
-> **Note:** Default configuration exposes no authentication. In multi-user deployments, place behind an authenticating reverse proxy.
+> **Note:** All API endpoints require authentication via session token or API key. Only `/api/health` and `/api/auth/login` are unauthenticated.
 
 ### A.6 Edge Cases and Error Boundaries
 
@@ -843,6 +880,7 @@ stateDiagram-v2
 |---|---|---|---|
 | 1.0 | 2026-03-05 | Soqucoin Labs Inc. | Initial release |
 | 1.1 | 2026-03-05 | Soqucoin Labs Inc. | Added Appendix A: State Machine Analysis |
+| 1.2 | 2026-03-10 | Soqucoin Labs Inc. | Updated for v1.1.0: RBAC, session auth, HMAC audit, Prometheus metrics, corrected API paths |
 
 ---
 
