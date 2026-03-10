@@ -1,23 +1,24 @@
-# PQCAT Build System
+# PQCAT Scanner Build System
 # Soqucoin Labs Inc.
 #
-# Two editions built from the same codebase:
-#   Air-Gapped (default): Zero outbound network calls, embedded intel only
-#   Connected (Pro):      Live threat intel feed, REST API, web dashboard
+# This is the open-source scanner (Apache 2.0).
+# For the Pro edition (compliance engine, dashboard, RBAC),
+# see: https://github.com/soqucoin-labs/pqcat/releases
 #
 # Usage:
-#   make              Build air-gapped edition (default, federal-safe)
-#   make pro          Build connected edition with live feed + dashboard
-#   make all          Build both editions
+#   make              Build scanner (default)
 #   make test         Run tests
+#   make linux-amd64  Cross-compile for Linux x86_64
+#   make linux-arm64  Cross-compile for Linux ARM64
+#   make windows      Cross-compile for Windows x86_64
+#   make release      Build all platforms + checksums + SBOM
 #   make sbom         Generate PQCAT's own CycloneDX SBOM
 #   make checksums    Generate SHA-256 checksums for release
 #   make sidecar      Generate intel sidecar template
 #   make clean        Remove build artifacts
 
 BINARY_NAME := pqcat
-PRO_BINARY  := pqcat-pro
-VERSION     := 1.0.0
+VERSION     := 1.1.0
 BUILD_DATE  := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 GIT_COMMIT  := $(shell git rev-parse --short HEAD 2>/dev/null || echo "dev")
 
@@ -27,54 +28,62 @@ LDFLAGS := -s -w \
 	-X 'main.BuildDate=$(BUILD_DATE)' \
 	-X 'main.GitCommit=$(GIT_COMMIT)'
 
-.PHONY: all airgap pro test sidecar sbom checksums clean help
+.PHONY: all build test sidecar sbom checksums clean help pro
 
-# Default target: air-gapped edition
-all: airgap pro
+# Default target: build scanner
+all: build
 
-airgap: ## Build air-gapped edition (default, no network intel)
-	@echo "Building PQCAT Air-Gapped Edition v$(VERSION)..."
-	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS) -X 'main.Edition=Air-Gapped'" \
+build: ## Build PQCAT scanner
+	@echo "Building PQCAT Scanner v$(VERSION)..."
+	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS) -X 'main.Edition=Scanner'" \
 		-o $(BINARY_NAME) ./cmd/pqcat/
-	@echo "✓ Built $(BINARY_NAME) (air-gapped, $$(wc -c < $(BINARY_NAME) | xargs) bytes)"
-	@echo "  Zero outbound network capability. Federal-safe."
+	@echo "✓ Built $(BINARY_NAME) ($$(wc -c < $(BINARY_NAME) | xargs) bytes)"
+	@echo "  Zero outbound network capability. Air-gap safe."
 	@echo "  Subcommands: scan, dashboard, config"
 
-pro: ## Build connected edition with live threat intel + REST API
-	@echo "Building PQCAT Pro Edition v$(VERSION)..."
-	CGO_ENABLED=0 go build -tags connected \
-		-ldflags "$(LDFLAGS) -X 'main.Edition=Pro'" \
-		-o $(PRO_BINARY) ./cmd/pqcat/
-	@echo "✓ Built $(PRO_BINARY) (connected, $$(wc -c < $(PRO_BINARY) | xargs) bytes)"
-	@echo "  Live threat intel feed + REST API + web dashboard enabled."
-	@echo "  Subcommands: scan, serve, dashboard, config"
+pro: ## ⚠️  Pro edition is not buildable from this repo
+	@echo ""
+	@echo "═══════════════════════════════════════════════════════════════"
+	@echo "  PQCAT Pro is distributed as pre-built signed binaries."
+	@echo ""
+	@echo "  The Pro edition source code (compliance engine, dashboard,"
+	@echo "  RBAC, scoring, reporting) is proprietary and not included"
+	@echo "  in this open-source repository."
+	@echo ""
+	@echo "  To obtain PQCAT Pro:"
+	@echo "    → Pre-built binaries: github.com/soqucoin-labs/pqcat/releases"
+	@echo "    → Enterprise licensing: labs@soqu.org"
+	@echo "    → Documentation: soqucoin.com/pqcat"
+	@echo "═══════════════════════════════════════════════════════════════"
+	@echo ""
 
-# Cross-compilation for federal deployment
-linux-amd64: ## Build for Linux x86_64 (common federal server)
+# Cross-compilation targets
+linux-amd64: ## Build for Linux x86_64
 	@echo "Cross-compiling for linux/amd64..."
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
-		-ldflags "$(LDFLAGS) -X 'main.Edition=Air-Gapped'" \
+		-ldflags "$(LDFLAGS) -X 'main.Edition=Scanner'" \
 		-o $(BINARY_NAME)-linux-amd64 ./cmd/pqcat/
 	@echo "✓ Built $(BINARY_NAME)-linux-amd64"
 
 linux-arm64: ## Build for Linux ARM64
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build \
-		-ldflags "$(LDFLAGS) -X 'main.Edition=Air-Gapped'" \
+		-ldflags "$(LDFLAGS) -X 'main.Edition=Scanner'" \
 		-o $(BINARY_NAME)-linux-arm64 ./cmd/pqcat/
+	@echo "✓ Built $(BINARY_NAME)-linux-arm64"
 
-windows-amd64: ## Build for Windows x86_64
+windows: ## Build for Windows x86_64
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build \
-		-ldflags "$(LDFLAGS) -X 'main.Edition=Air-Gapped'" \
+		-ldflags "$(LDFLAGS) -X 'main.Edition=Scanner'" \
 		-o $(BINARY_NAME)-windows-amd64.exe ./cmd/pqcat/
+	@echo "✓ Built $(BINARY_NAME)-windows-amd64.exe"
 
 # Release: build all platforms + integrity artifacts
 release: ## Build release binaries for all platforms + checksums + SBOM
 	@echo "Building release v$(VERSION)..."
 	@$(MAKE) linux-amd64
 	@$(MAKE) linux-arm64
-	@$(MAKE) windows-amd64
-	@$(MAKE) airgap
-	@$(MAKE) pro
+	@$(MAKE) windows
+	@$(MAKE) build
 	@$(MAKE) sbom
 	@$(MAKE) checksums
 	@echo ""
@@ -104,12 +113,12 @@ sbom: ## Generate PQCAT's own CycloneDX SBOM (eat our own dog food)
 
 checksums: ## Generate SHA-256 checksums for release binaries
 	@echo "Generating checksums..."
-	@shasum -a 256 $(BINARY_NAME) $(PRO_BINARY) $(BINARY_NAME)-linux-* $(BINARY_NAME)-windows-* 2>/dev/null > SHA256SUMS || \
-		shasum -a 256 $(BINARY_NAME) $(PRO_BINARY) 2>/dev/null > SHA256SUMS
+	@shasum -a 256 $(BINARY_NAME) $(BINARY_NAME)-linux-* $(BINARY_NAME)-windows-* 2>/dev/null > SHA256SUMS || \
+		shasum -a 256 $(BINARY_NAME) 2>/dev/null > SHA256SUMS
 	@echo "✓ Generated SHA256SUMS"
 	@cat SHA256SUMS
 
-sidecar: airgap ## Generate intel sidecar template
+sidecar: build ## Generate intel sidecar template
 	./$(BINARY_NAME) scan tls localhost --threatintel pqcat-intel.json 2>/dev/null || true
 	@echo "✓ Generated pqcat-intel.json sidecar template"
 	@echo "  Edit this file and deploy alongside pqcat binary"
@@ -118,7 +127,7 @@ test: ## Run tests
 	go test ./... -v -count=1
 
 clean: ## Remove build artifacts
-	rm -f $(BINARY_NAME) $(PRO_BINARY)
+	rm -f $(BINARY_NAME)
 	rm -f $(BINARY_NAME)-linux-* $(BINARY_NAME)-windows-*
 	rm -f pqcat-intel.json pqcat-*.cdx.json SHA256SUMS*
 	rm -f pqcat.db

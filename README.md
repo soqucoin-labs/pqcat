@@ -32,13 +32,13 @@ pqcat scan tls agency.gov --framework fisma --html report.html --save-db
 | ML-DSA-44 report seals (FIPS 204) | — | ✓ |
 | Live threat intelligence | — | ✓ |
 
-Both editions are built from this codebase. The Enclave edition compiles with **zero network code** beyond scan targets — guaranteed by the compiler.
+The scanner is open-source (Apache 2.0). The Pro edition (compliance engine, dashboard, RBAC, reporting) is distributed as [pre-built signed binaries](https://github.com/soqucoin-labs/pqcat/releases).
 
 ## Quick Start
 
 ```bash
 # Build
-make all
+make
 
 # Scan
 ./pqcat scan tls example.com --framework nist
@@ -48,9 +48,6 @@ make all
 
 # Terminal dashboard
 ./pqcat dashboard
-
-# Start Pro web dashboard (prints admin password on first run)
-./pqcat-pro serve
 
 # Generate org config
 ./pqcat config init
@@ -73,13 +70,15 @@ make all
 ## Build
 
 ```bash
-make airgap       # Enclave (air-gapped) edition
-make pro          # Pro (connected) edition
+make              # Build scanner
 make test         # Run unit tests
 make sbom         # Generate CycloneDX SBOM
 make checksums    # SHA-256 integrity manifest
-make release      # Full release package
+make release      # Cross-platform release package
+make linux-amd64  # Cross-compile for Linux x86_64
 ```
+
+> **Pro Edition:** The Pro source code is proprietary and not included in this repository. Pre-built Pro binaries are available from [GitHub Releases](https://github.com/soqucoin-labs/pqcat/releases). For enterprise licensing, contact [labs@soqu.org](mailto:labs@soqu.org).
 
 ## Security
 

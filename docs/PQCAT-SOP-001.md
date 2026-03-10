@@ -152,18 +152,14 @@ pqcat version
 git clone https://github.com/soqucoin-labs/pqcat.git
 cd pqcat
 
-# Build Enclave edition (air-gapped, no server code)
-make airgap
-
-# Build Pro edition (with REST API + web dashboard)
-make pro
-
-# Build both editions
-make all
+# Build scanner
+make
 
 # Run tests
 make test
 ```
+
+> **Note:** This repository builds the open-source scanner only. The Pro edition (compliance engine, dashboard, RBAC, reporting) is distributed as pre-built signed binaries. See [GitHub Releases](https://github.com/soqucoin-labs/pqcat/releases) or contact [labs@soqu.org](mailto:labs@soqu.org) for enterprise licensing.
 
 ### 6.4 Cross-Platform Builds
 
@@ -588,7 +584,7 @@ The Enclave edition provides compile-time guarantees:
 
 | Symptom | Cause | Resolution |
 |---|---|---|
-| `serve` rejected with error | Running Enclave edition | Build Pro: `make pro` |
+| `serve` rejected with error | Running scanner edition | Pro edition required — see [GitHub Releases](https://github.com/soqucoin-labs/pqcat/releases) |
 | Empty scan results | Target unreachable | Verify network connectivity to scan target |
 | SQLite lock errors | Multiple processes writing | Use separate .db files per process |
 | Configuration not loading | Wrong precedence level | Check `pqcat config init` for reference; verify file path |
