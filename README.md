@@ -15,7 +15,7 @@ PQCAT discovers every cryptographic asset across your infrastructure, classifies
 pqcat scan tls agency.gov --framework fisma --html report.html --save-db
 ```
 
-**Output:** A scored Crypto Bill of Health with RED/YELLOW/GREEN zone breakdown, POA&M entries, and framework-specific migration recommendations.
+**Output:** A scored Crypto Bill of Health with Quantum Vulnerable / Transitional / PQ Compliant zone breakdown, POA&M entries, and framework-specific migration recommendations.
 
 ## Two Editions
 
@@ -93,17 +93,19 @@ PQCAT Pro includes enterprise-grade security out of the box:
 - **Security Headers**: CSP, HSTS, X-Frame-Options, CORS, rate limiting
 - **Env-Only Secrets**: TLS certs, SIEM tokens, audit keys via environment variables
 
-## Configuration
+## Documentation
 
-PQCAT uses YAML with a 6-level precedence chain:
-
-```
-CLI flags > env vars > --config file > ./pqcat.yaml > ~/.pqcat/config.yaml > /etc/pqcat/pqcat.yaml
-```
-
-Generate a documented template: `pqcat config init`
-
-See [docs/PQCAT-SOP-001.md](docs/PQCAT-SOP-001.md) for the full Standard Operations Procedure.
+| Document | Description |
+|----------|-------------|
+| **[Quick Start](docs/QUICK-START.md)** | Install, first scan, generate reports — get running in 5 minutes |
+| **[Deployment Guide](docs/DEPLOYMENT.md)** | Binary install, Docker, air-gap deployment, systemd, hardening |
+| **[Architecture](docs/ARCHITECTURE.md)** | Four-layer design, package structure, build tags |
+| **[API Reference](docs/API.md)** | REST API endpoints, authentication, session management (Pro) |
+| **[Admin Guide](docs/ADMIN-GUIDE.md)** | RBAC, user management, audit logging, security configuration (Pro) |
+| **[Standard Operations Procedure](docs/PQCAT-SOP-001.md)** | Federal-grade SOP: installation, configuration, operations, maintenance |
+| **[Changelog](CHANGELOG.md)** | Version history and release notes |
+| **[Contributing](CONTRIBUTING.md)** | Development setup, testing, build commands |
+| **[Security Policy](SECURITY.md)** | Vulnerability reporting, security architecture |
 
 ## Architecture
 

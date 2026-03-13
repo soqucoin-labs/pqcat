@@ -61,7 +61,7 @@ Both editions are built from the same codebase using Go build tags. The Enclave 
 | **Pro** | Connected edition with REST API, web dashboard, and live threat intelligence |
 | **CBOH** | Crypto Bill of Health — the branded 1-page scored assessment report |
 | **POA&M** | Plan of Action and Milestones — federal compliance tracking artifact |
-| **Zone** | Classification band: RED (quantum-vulnerable), YELLOW (transitional), GREEN (CNSA 2.0 compliant) |
+| **Zone** | Classification band: Quantum Vulnerable, Transitional, PQ Compliant (CNSA 2.0) |
 | **Sidecar** | A JSON file containing threat intelligence data, deployed alongside the binary |
 
 ## 5. System Architecture
@@ -134,7 +134,7 @@ Both editions are built from the same codebase using Go build tags. The Enclave 
 ```bash
 # Download release binary from GitHub Releases
 # https://github.com/soqucoin-labs/pqcat/releases
-curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v1.1.0/pqcat-linux-amd64
+curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v1.0.0/pqcat-linux-amd64
 chmod +x pqcat-linux-amd64
 mv pqcat-linux-amd64 /usr/local/bin/pqcat
 
@@ -145,21 +145,24 @@ sha256sum -c SHA256SUMS
 pqcat version
 ```
 
-### 6.3 Build from Source
+### 6.3 Build from Source (Internal)
+
+> **Note:** Building from source requires the private `pqcat-engine` repository. External users should download pre-built binaries from [GitHub Releases](https://github.com/soqucoin-labs/pqcat/releases).
 
 ```bash
-# Clone repository
-git clone https://github.com/soqucoin-labs/pqcat.git
-cd pqcat
+# Build Enclave edition (air-gapped, no server code)
+make airgap
 
-# Build scanner
-make
+# Build Pro edition (with REST API + web dashboard)
+make pro
 
-# Run tests
+# Build both editions
+make all
+
+# Run all tests (both editions)
 make test
+go test -tags connected ./internal/server/ -v -count=1
 ```
-
-> **Note:** This repository builds the open-source scanner only. The Pro edition (compliance engine, dashboard, RBAC, reporting) is distributed as pre-built signed binaries. See [GitHub Releases](https://github.com/soqucoin-labs/pqcat/releases) or contact [labs@soqu.org](mailto:labs@soqu.org) for enterprise licensing.
 
 ### 6.4 Cross-Platform Builds
 
@@ -465,7 +468,7 @@ To transfer scan results from an air-gapped system:
 
 The CBOH is the branded deliverable — a scored assessment that summarizes:
 - Overall PQC readiness score (0–100)
-- RED/YELLOW/GREEN asset breakdown
+- Quantum Vulnerable / Transitional / PQ Compliant asset breakdown
 - Days until next compliance milestone
 - Top 3 prioritized migration actions
 - NIST 800-53 control mapping
@@ -493,9 +496,9 @@ The CBOH is the branded deliverable — a scored assessment that summarizes:
 
 | Zone | Criteria | Urgency |
 |---|---|---|
-| **RED** | RSA, ECDSA, ECDH, DH, DSA, SHA-1 (any key size) | Immediate replacement required |
-| **YELLOW** | AES-128, SHA-256, 3DES, hybrid schemes | Monitor and plan migration |
-| **GREEN** | ML-KEM, ML-DSA, SLH-DSA, AES-256, SHA-384+ | CNSA 2.0 compliant |
+| **Quantum Vulnerable** | RSA, ECDSA, ECDH, DH, DSA, SHA-1 (any key size) | Immediate replacement required |
+| **Transitional** | AES-128, SHA-256, 3DES, hybrid schemes | Monitor and plan migration |
+| **PQ Compliant** | ML-KEM, ML-DSA, SLH-DSA, AES-256, SHA-384+ | CNSA 2.0 compliant |
 
 ### 11.3 Scoring Formula
 
@@ -584,7 +587,7 @@ The Enclave edition provides compile-time guarantees:
 
 | Symptom | Cause | Resolution |
 |---|---|---|
-| `serve` rejected with error | Running scanner edition | Pro edition required — see [GitHub Releases](https://github.com/soqucoin-labs/pqcat/releases) |
+| `serve` rejected with error | Running Enclave edition | Build Pro: `make pro` |
 | Empty scan results | Target unreachable | Verify network connectivity to scan target |
 | SQLite lock errors | Multiple processes writing | Use separate .db files per process |
 | Configuration not loading | Wrong precedence level | Check `pqcat config init` for reference; verify file path |
@@ -863,8 +866,8 @@ stateDiagram-v2
 
 | Route | Method | Min Role | Description |
 |---|---|---|---|
-| `/` | GET | (none — login required in SPA) | Web dashboard |
-| `/api/health` | GET | (none) | Health check |
+| `/` | GET | (none) | Dashboard SPA (login required) |
+| `/api/health` | GET | (none) | Health check and version info |
 | `/api/auth/login` | POST | (none) | Session authentication |
 | `/api/auth/logout` | POST | (any) | End session |
 | `/api/auth/me` | GET | (any) | Current user info |
@@ -872,7 +875,7 @@ stateDiagram-v2
 | `/api/stats` | GET | viewer | Dashboard aggregate stats |
 | `/api/scans` | GET | viewer | List recent scans |
 | `/api/scan` | POST | analyst | Trigger a new scan |
-| `/api/scans/{id}` | GET | viewer | Scan asset details |
+| `/api/scans/{id}` | GET | viewer | Get scan details with assets |
 | `/api/users` | GET/POST/PUT/DELETE | admin | User management |
 | `/api/audit-log` | GET | admin | View audit log |
 | `/api/audit-log/verify` | GET | admin | Verify HMAC chain integrity |
@@ -905,7 +908,7 @@ stateDiagram-v2
 |---|---|---|---|
 | 1.0 | 2026-03-05 | Soqucoin Labs Inc. | Initial release |
 | 1.1 | 2026-03-05 | Soqucoin Labs Inc. | Added Appendix A: State Machine Analysis |
-| 1.2 | 2026-03-10 | Soqucoin Labs Inc. | Updated for v1.1.0: RBAC, session auth, HMAC audit, Prometheus metrics, corrected API paths |
+| 1.2 | 2026-03-13 | Soqucoin Labs Inc. | Updated for v1.0.0: RBAC, session auth, HMAC audit, Prometheus metrics, corrected API paths |
 
 ---
 

@@ -4,8 +4,7 @@
 
 | Version | Supported |
 |---|---|
-| 1.1.x | ✅ Active |
-| 1.0.x | ⚠️ Security fixes only |
+| 1.0.x | ✅ Active |
 
 ## Reporting a Vulnerability
 
