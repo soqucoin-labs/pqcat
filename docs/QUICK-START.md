@@ -3,46 +3,82 @@
 ## Install
 
 ```bash
-# From release
-curl -LO https://github.com/soqucoin-labs/pqcat/releases/latest/download/pqcat-pro_$(uname -s)_$(uname -m).tar.gz
-tar xzf pqcat-pro_*.tar.gz && chmod +x pqcat-pro
-sudo mv pqcat-pro /usr/local/bin/
+# Step 1: Download from releases
+curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v1.1.0/pqcat-1.1.0-linux-amd64.tar.gz
+
+# Step 2: Extract the binary
+tar xzf pqcat-1.1.0-linux-amd64.tar.gz
+
+# Step 3: Install to your PATH
+chmod +x pqcat-1.1.0-linux-amd64
+sudo mv pqcat-1.1.0-linux-amd64 /usr/local/bin/pqcat
 
 # From source
 git clone https://github.com/soqucoin-labs/pqcat.git && cd pqcat
-make build-pro
+make pro
 ```
 
 ## First Scan
 
 ```bash
 # Scan a website's TLS configuration
-pqcat-pro scan tls --target example.com
+pqcat scan tls example.com
 
 # Scan SSH keys on a server
-pqcat-pro scan ssh --target 10.0.0.1
+pqcat scan ssh 10.0.0.1
 
-# Scan an entire subnet
-pqcat-pro scan cidr --target 10.0.0.0/24
+# Scan an entire subnet (50 workers)
+pqcat scan tls 10.0.0.0/24 --workers 50
 
 # Scan an SBOM file
-pqcat-pro scan sbom --target ./bom.json
+pqcat scan sbom ./bom.json
+
+# Scan source code for crypto APIs
+pqcat scan code ./src/
+
+# Scan PKI certificates
+pqcat scan pki /etc/ssl/certs/
+
+# Import OpenSCAP results
+pqcat scan scap results.xml
 
 # Run all applicable scanners
-pqcat-pro scan all --target example.com
+pqcat scan all example.com
 ```
 
 ## Generate Reports
 
 ```bash
-# HTML report (self-contained, works offline)
-pqcat-pro report --format html --output report.html
+# JSON report (machine-readable)
+pqcat scan tls example.com --json --output report.json
 
 # PDF Crypto Bill of Health
-pqcat-pro report --format pdf --output cboh.pdf
+pqcat scan tls example.com --pdf report.pdf
 
-# JSON (machine-readable)
-pqcat-pro report --format json --output scan.json
+# HTML report (self-contained, works offline)
+pqcat scan tls example.com --html report.html
+
+# Executive briefing PDF
+pqcat scan tls example.com --briefing exec-brief.pdf
+
+# OSCAL assessment results (NIST v1.2.1)
+pqcat scan tls example.com --oscal assessment.json
+
+# Cryptographic Bill of Materials (CycloneDX v1.6)
+pqcat scan tls example.com --cbom cbom.json
+```
+
+## Migration Simulator
+
+```bash
+# Model your PQC migration timeline
+pqcat simulate tls example.com --org-size medium --budget moderate --team-size 3
+
+# Set a target score and hard deadline
+pqcat simulate tls example.com --target-score 95 --target-date 2027-12-31
+
+# Output as JSON for integration
+pqcat simulate tls example.com --json --output simulation.json
 ```
 
 ## Start Dashboard
@@ -54,27 +90,44 @@ pqcat-pro serve
 # ⚠️ First run prints a random admin password to the console!
 # Copy it immediately — it is shown only once.
 
-# Open http://localhost:8443 in browser
+# Open https://localhost:8443 in browser
 # Log in with username 'admin' and the printed password
-# You will be prompted to change the password on first login
 
 # Enclave edition — terminal dashboard
 pqcat dashboard
+```
+
+## Continuous Monitoring
+
+```bash
+# Watch for changes every 60 seconds
+pqcat scan tls example.com --watch 60
+
+# Save a baseline for drift detection
+pqcat scan tls example.com --save-baseline baseline.json
+
+# Compare against baseline
+pqcat scan tls example.com --baseline baseline.json
 ```
 
 ## Key Commands
 
 | Command | Description |
 |---|---|
-| `scan tls --target HOST` | Scan TLS certificates |
-| `scan ssh --target HOST` | Scan SSH host keys |
-| `scan sbom --target FILE` | Analyze SBOM for crypto libs |
-| `scan cidr --target CIDR` | Scan IP range |
-| `scan code --target DIR` | Scan source code |
-| `scan all --target HOST` | Run all applicable scanners |
-| `report --format pdf` | Generate PDF report |
+| `scan tls HOST` | Scan TLS certificates and cipher suites |
+| `scan ssh HOST` | Scan SSH host keys |
+| `scan sbom FILE` | Analyze SBOM for crypto libraries |
+| `scan pki PATH` | Scan PKI certificates |
+| `scan code DIR` | Scan source code for crypto APIs |
+| `scan hsm [auto]` | Discover HSMs, KMS, keystores |
+| `scan scap FILE` | Import OpenSCAP XCCDF/ARF results |
+| `scan all HOST` | Run all applicable scanners |
+| `simulate TYPE TARGET` | Model PQC migration timeline |
 | `serve` | Start web dashboard (Pro) |
 | `dashboard` | Terminal dashboard (TUI) |
+| `benchmark` | Run cryptographic benchmarks |
+| `verify FILE` | Verify report seal and integrity |
+| `quickstart` | Interactive first-run wizard |
 | `version` | Show version and edition |
 
 ## Configuration
@@ -84,6 +137,7 @@ Create `pqcat.yaml` in the current directory:
 ```yaml
 framework: cnsa2
 organization: "My Agency"
+environment: "production"
 scanner:
   workers: 4
   timeout: 30s

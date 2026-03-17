@@ -1,7 +1,7 @@
 # PQCAT Standard Operations Procedure
 
 **Document ID:** PQCAT-SOP-001  
-**Version:** 1.0  
+**Version:** 1.1  
 **Classification:** UNCLASSIFIED // FOUO  
 **Date:** March 5, 2026  
 **Author:** Soqucoin Labs Inc.  
@@ -134,12 +134,12 @@ Both editions are built from the same codebase using Go build tags. The Enclave 
 ```bash
 # Download release binary from GitHub Releases
 # https://github.com/soqucoin-labs/pqcat/releases
-curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v1.0.0/pqcat-linux-amd64
+curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v1.1.0/pqcat-linux-amd64
 chmod +x pqcat-linux-amd64
 mv pqcat-linux-amd64 /usr/local/bin/pqcat
 
 # Verify integrity
-sha256sum -c SHA256SUMS
+shasum -a 384 -c SHA384SUMS
 
 # Verify version
 pqcat version
@@ -179,8 +179,8 @@ For classified or disconnected environments:
 
 1. Build the binary on a connected workstation: `make airgap`
 2. Generate SHA-256 checksum: `make checksums`
-3. Transfer `pqcat` binary and `SHA256SUMS` to target via approved media
-4. Verify checksum on target: `sha256sum -c SHA256SUMS`
+3. Transfer `pqcat` binary and `SHA384SUMS` to target via approved media
+4. Verify checksum on target: `shasum -a 384 -c SHA384SUMS`
 5. Place binary in `/usr/local/bin/` or equivalent PATH location
 6. No additional runtime files, libraries, or configuration are required
 
@@ -543,18 +543,18 @@ PQCAT generates its own CycloneDX SBOM via `make sbom`:
 
 ```bash
 make sbom
-# Generates pqcat-v1.0.0.cdx.json
+# Generates pqcat-v1.1.0.cdx.json
 
 # Self-scan PQCAT's own dependencies
-pqcat scan sbom pqcat-v1.0.0.cdx.json --framework nist
+pqcat scan sbom pqcat-v1.1.0.cdx.json --framework nist
 ```
 
 ## 13. Security Considerations
 
 ### 13.1 Binary Integrity
 
-- All release binaries include SHA-256 checksums (`SHA256SUMS`)
-- Verify before deployment: `sha256sum -c SHA256SUMS`
+- All release binaries include SHA-384 checksums (`SHA384SUMS`)
+- Verify before deployment: `shasum -a 384 -c SHA384SUMS`
 - SBOM available for all releases in CycloneDX 1.5 format
 
 ### 13.2 Air-Gapped Guarantees
@@ -615,7 +615,7 @@ sqlite3 pqcat.db "SELECT count(*) FROM scans;"
 ### 15.1 Version Updates
 
 1. Download new binary from release channel
-2. Verify checksums: `sha256sum -c SHA256SUMS`
+2. Verify checksums: `shasum -a 384 -c SHA384SUMS`
 3. Replace binary in PATH location
 4. Verify: `pqcat version`
 5. No database migration required — schema is forward-compatible
@@ -864,22 +864,22 @@ stateDiagram-v2
 
 **API Route Registration:**
 
-| Route | Method | Min Role | Description |
+| Route | Handler | Method | Min Role |
 |---|---|---|---|
-| `/` | GET | (none) | Dashboard SPA (login required) |
-| `/api/health` | GET | (none) | Health check and version info |
-| `/api/auth/login` | POST | (none) | Session authentication |
-| `/api/auth/logout` | POST | (any) | End session |
-| `/api/auth/me` | GET | (any) | Current user info |
-| `/api/auth/password` | POST | (any) | Change own password |
-| `/api/stats` | GET | viewer | Dashboard aggregate stats |
-| `/api/scans` | GET | viewer | List recent scans |
-| `/api/scan` | POST | analyst | Trigger a new scan |
-| `/api/scans/{id}` | GET | viewer | Get scan details with assets |
-| `/api/users` | GET/POST/PUT/DELETE | admin | User management |
-| `/api/audit-log` | GET | admin | View audit log |
-| `/api/audit-log/verify` | GET | admin | Verify HMAC chain integrity |
-| `/metrics` | GET | admin | Prometheus metrics |
+| `/` | `dashboardHandler` | GET | (none — login required in SPA) |
+| `/api/health` | `healthHandler` | GET | (none) |
+| `/api/auth/login` | `handleAuthLogin` | POST | (none) |
+| `/api/auth/logout` | `handleAuthLogout` | POST | (any) |
+| `/api/auth/me` | `handleAuthMe` | GET | (any) |
+| `/api/auth/password` | `handleAuthChangePassword` | POST | (any) |
+| `/api/stats` | `handleStats` | GET | viewer |
+| `/api/scans` | `handleScans` | GET | viewer |
+| `/api/scan` | `handleScan` | POST | analyst |
+| `/api/scans/{id}` | `handleScanDetail` | GET | viewer |
+| `/api/users` | `handleUsers` | GET/POST/PUT/DELETE | admin |
+| `/api/audit-log` | `handleAuditLog` | GET | admin |
+| `/api/audit-log/verify` | `handleAuditVerify` | GET | admin |
+| `/metrics` | `handleMetrics` | GET | admin |
 
 > **Note:** All API endpoints require authentication via session token or API key. Only `/api/health` and `/api/auth/login` are unauthenticated.
 
@@ -908,7 +908,7 @@ stateDiagram-v2
 |---|---|---|---|
 | 1.0 | 2026-03-05 | Soqucoin Labs Inc. | Initial release |
 | 1.1 | 2026-03-05 | Soqucoin Labs Inc. | Added Appendix A: State Machine Analysis |
-| 1.2 | 2026-03-13 | Soqucoin Labs Inc. | Updated for v1.0.0: RBAC, session auth, HMAC audit, Prometheus metrics, corrected API paths |
+| 1.2 | 2026-03-10 | Soqucoin Labs Inc. | Updated for v1.1.0: RBAC, session auth, HMAC audit, Prometheus metrics, corrected API paths |
 
 ---
 

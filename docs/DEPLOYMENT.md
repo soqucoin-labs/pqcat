@@ -8,17 +8,23 @@
 ## Quick Deploy (Binary)
 
 ```bash
-# Download from releases
-curl -LO https://github.com/soqucoin-labs/pqcat/releases/latest/download/pqcat-pro_linux_amd64.tar.gz
-tar xzf pqcat-pro_linux_amd64.tar.gz
-chmod +x pqcat-pro
+# Step 1: Download from releases
+curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v1.1.0/pqcat-1.1.0-linux-amd64.tar.gz
 
-# Verify checksum
-sha256sum -c pqcat-pro_linux_amd64.tar.gz.sha256
+# Step 2: Extract the binary
+tar xzf pqcat-1.1.0-linux-amd64.tar.gz
+
+# Step 3: Install to your PATH
+chmod +x pqcat-1.1.0-linux-amd64
+sudo mv pqcat-1.1.0-linux-amd64 /usr/local/bin/pqcat
+
+# Verify checksum (SHA-384, CNSA 2.0 compliant)
+curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v1.1.0/checksums.sha384
+shasum -a 384 -c checksums.sha384
 
 # Run
-./pqcat-pro scan tls --target example.com
-./pqcat-pro serve  # Start dashboard on :8443
+pqcat scan tls example.com
+pqcat serve  # Start dashboard on :8443 (Pro edition)
 ```
 
 ## Build from Source
@@ -28,10 +34,10 @@ git clone https://github.com/soqucoin-labs/pqcat.git
 cd pqcat
 
 # Pro edition (REST API + dashboard)
-make build-pro
+make pro
 
-# Enclave edition (air-gap safe, zero outbound network)
-make build-enclave
+# Air-Gapped edition (air-gap safe, zero outbound network)
+make airgap
 
 # Verify static binary
 file pqcat && ldd pqcat  # should show "statically linked"
@@ -59,12 +65,12 @@ docker run -d -p 8443:8443 -v pqcat-data:/data pqcat-pro serve
 
 ```bash
 # On build machine
-make build-enclave
-sha256sum pqcat > pqcat.sha256
+make airgap
+shasum -a 384 pqcat > pqcat.sha384
 
 # On target (air-gapped)
-sha256sum -c pqcat.sha256
-./pqcat scan tls --target 10.0.0.0/24
+shasum -a 384 -c pqcat.sha384
+./pqcat scan tls 10.0.0.0/24
 ./pqcat dashboard   # TUI terminal dashboard
 ```
 
@@ -157,20 +163,20 @@ server {
 
 ```bash
 curl http://localhost:8443/api/health
-# {"status":"ok","version":"1.0.0","edition":"Pro"}
+# {"status":"ok","version":"1.1.0","edition":"Pro"}
 ```
 
 ## Code Signing
 
-Release binaries should be verified via SHA-256 checksums published alongside each release:
+Release binaries should be verified via SHA-384 checksums published alongside each release:
 
 ```bash
-sha256sum -c checksums.txt
+shasum -a 384 -c checksums.sha384
 ```
 
 For organizational signing, add GPG signatures:
 
 ```bash
 make release-sign  # Signs all artifacts with GPG key
-gpg --verify pqcat-pro_linux_amd64.tar.gz.sig
+gpg --verify SHA384SUMS.asc SHA384SUMS
 ```
