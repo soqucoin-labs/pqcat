@@ -41,13 +41,21 @@ func ClassifyWithReason(algorithm string) (models.Zone, string) {
 	if containsAny(alg, []string{"RIPEMD"}) {
 		return models.ZoneRed, "RIPEMD-160 is below CNSA 2.0 minimum hash security — retire"
 	}
+	if containsAny(alg, []string{"TLS-1.0", "TLS-1.1", "SSL-3.0", "SSL-2.0"}) {
+		return models.ZoneRed, "Deprecated TLS/SSL protocol version — prohibited by NIST SP 800-52 Rev. 2"
+	}
+	if containsAny(alg, []string{"WEAK-RNG"}) {
+		return models.ZoneRed, "Non-cryptographic PRNG — must use CSPRNG for key generation, nonces, and secrets"
+	}
+
+	// Symmetric/hash algorithms are quantum resistant (Grover halves security, but remains safe)
+	if isSymmetricSafe(alg) {
+		return models.ZoneGreen, "Symmetric/hash algorithm — quantum resistant (Grover halves security, AES-256→128-bit equivalent)"
+	}
 
 	reason := "Quantum vulnerable — broken by Shor's algorithm on a cryptographically relevant quantum computer"
 	if containsAny(alg, []string{"SCHNORR"}) {
 		reason = "Schnorr signatures use ECC — broken by Shor's algorithm on a CRQC"
-	}
-	if containsAny(alg, []string{"AES", "SHA-256", "SHA-384", "SHA-512", "SHA3"}) {
-		reason = "Symmetric/hash algorithm — quantum resistant via Grover's (halved security), but not a PQC signature/KEM"
 	}
 
 	return models.ZoneRed, reason
@@ -96,15 +104,15 @@ func isYellow(alg string) bool {
 func isSymmetricSafe(alg string) bool {
 	// Reject if the algorithm contains any asymmetric prefix
 	asymmetricPrefixes := []string{
-		"ECDSA", "RSA", "ECDH", "ED25519", "DSA", "DH-",
-		"SCHNORR", "SECP256K1",
+		"ECDSA", "RSA", "ECDH", "ED25519", "ED448", "DSA", "DH-",
+		"SCHNORR", "SECP256K1", "X25519", "X448", "CURVE25519",
 	}
 	if containsAny(alg, asymmetricPrefixes) {
 		return false
 	}
 
-	// Reject classically broken algorithms
-	brokenAlgorithms := []string{"MD5", "SHA-1", "DES", "3DES", "RC4", "BLOWFISH", "RIPEMD"}
+	// Reject classically broken algorithms and deprecated protocols
+	brokenAlgorithms := []string{"MD5", "SHA-1", "DES", "3DES", "RC4", "BLOWFISH", "RIPEMD", "TLS-1.0", "TLS-1.1", "SSL-3.0", "SSL-2.0"}
 	if containsAny(alg, brokenAlgorithms) {
 		return false
 	}
@@ -118,6 +126,10 @@ func isSymmetricSafe(alg string) bool {
 		// Hash functions — quantum resistant (standalone)
 		"SHA-256", "SHA-384", "SHA-512", "SHA3",
 		"HMAC",
+		// Password hashing / KDFs — symmetric, quantum resistant
+		"BCRYPT", "ARGON2", "SCRYPT", "PBKDF2",
+		// Cryptographically Secure PRNGs — quantum resistant
+		"CSPRNG",
 		// EVP placeholder — assume mixed, classify safe until specific
 		"EVP-CRYPTO",
 	}
