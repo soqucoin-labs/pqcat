@@ -18,9 +18,11 @@ type Config struct {
 	Environment  string `yaml:"environment,omitempty"` // "production", "staging", "test"
 
 	// Default scan settings
-	Framework   string `yaml:"framework,omitempty"`   // nsm10, cnsa2, sp800131a, fisma, fedramp
-	Criticality string `yaml:"criticality,omitempty"` // STANDARD, HVA, NSS
-	Workers     int    `yaml:"workers,omitempty"`
+	Framework     string `yaml:"framework,omitempty"`   // nsm10, cnsa2, sp800131a, fisma, fedramp
+	Criticality   string `yaml:"criticality,omitempty"` // STANDARD, HVA, NSS
+	Workers       int    `yaml:"workers,omitempty"`
+	DataRetention int    `yaml:"data_retention,omitempty"` // HNDL: data retention period in years
+	Confidential  bool   `yaml:"confidential,omitempty"`   // CCE: default to confidential mode on scans
 
 	// Output defaults
 	OutputDir    string `yaml:"output_dir,omitempty"`
@@ -180,6 +182,12 @@ func mergeConfig(dst, src *Config) {
 	if src.Criticality != "" {
 		dst.Criticality = src.Criticality
 	}
+	if src.DataRetention > 0 {
+		dst.DataRetention = src.DataRetention
+	}
+	if src.Confidential {
+		dst.Confidential = true
+	}
 	if src.Workers > 0 {
 		dst.Workers = src.Workers
 	}
@@ -260,6 +268,14 @@ func mergeConfig(dst, src *Config) {
 func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("PQCAT_FRAMEWORK"); v != "" {
 		cfg.Framework = v
+	}
+	if v := os.Getenv("PQCAT_DATA_RETENTION"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.DataRetention = n
+		}
+	}
+	if v := os.Getenv("PQCAT_CONFIDENTIAL"); v == "true" || v == "1" {
+		cfg.Confidential = true
 	}
 	if v := os.Getenv("PQCAT_WORKERS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {

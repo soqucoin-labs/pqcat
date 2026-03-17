@@ -116,6 +116,8 @@ type Report struct {
 	Disclaimer       string            `json:"disclaimer"`                  // CCE: legal disclaimer (GAP-07)
 	ProofHash        string            `json:"proof_hash,omitempty"`        // Phase 2: SHA-384 of ZK proof
 	SealSig          string            `json:"seal_sig,omitempty"`          // CCE: Dilithium report seal (hex)
+	SealPubKey       string            `json:"seal_pub_key,omitempty"`      // CCE: ML-DSA-44 public key (hex, GAP-08)
+	SealAlgorithm    string            `json:"seal_algorithm,omitempty"`    // CCE: "ML-DSA-44" (FIPS 204)
 	Organization     string            `json:"organization,omitempty"`      // CCE Phase 2: customer name (UX-BLIND-05)
 	OrganizationLogo string            `json:"organization_logo,omitempty"` // CCE Phase 2: logo path (UX-BLIND-05)
 	CustomTitle      string            `json:"custom_title,omitempty"`      // CCE Phase 2: report title override (UX-BLIND-05)
