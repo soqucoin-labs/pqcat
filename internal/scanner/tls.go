@@ -77,6 +77,7 @@ func ScanTLS(target string, opts TLSScanOptions) (*models.ScanResult, error) {
 			ID:        fmt.Sprintf("%s:cipher:%d", addr, i),
 			Type:      models.AssetTLSCipher,
 			Algorithm: algo,
+			KeySize:   cipherKeySize(algo),
 			Zone:      zone,
 			Location:  fmt.Sprintf("%s (cipher suite: %s)", addr, cipherName),
 			Details: map[string]string{
@@ -92,6 +93,7 @@ func ScanTLS(target string, opts TLSScanOptions) (*models.ScanResult, error) {
 	for i, cert := range state.PeerCertificates {
 		sigAlgo := cert.SignatureAlgorithm.String()
 		pubKeyAlgo := describePublicKey(cert)
+		keyBits := publicKeyBits(cert)
 
 		// Classify the signature algorithm
 		sigZone := classifier.Classify(sigAlgo)
@@ -100,11 +102,13 @@ func ScanTLS(target string, opts TLSScanOptions) (*models.ScanResult, error) {
 			ID:        fmt.Sprintf("%s:cert:%d:sig", addr, i),
 			Type:      models.AssetTLSCert,
 			Algorithm: sigAlgo,
+			KeySize:   keyBits,
 			Zone:      sigZone,
 			Location:  fmt.Sprintf("%s (cert %d: %s)", addr, i, cert.Subject.CommonName),
 			Details: map[string]string{
 				"subject":     cert.Subject.CommonName,
 				"issuer":      cert.Issuer.CommonName,
+				"issuer_org":  certIssuerOrg(cert),
 				"serial":      cert.SerialNumber.String(),
 				"not_before":  cert.NotBefore.Format(time.RFC3339),
 				"not_after":   cert.NotAfter.Format(time.RFC3339),
@@ -122,6 +126,7 @@ func ScanTLS(target string, opts TLSScanOptions) (*models.ScanResult, error) {
 			ID:        fmt.Sprintf("%s:cert:%d:pubkey", addr, i),
 			Type:      models.AssetTLSCert,
 			Algorithm: pubKeyAlgo,
+			KeySize:   keyBits,
 			Zone:      pubZone,
 			Location:  fmt.Sprintf("%s (cert %d: %s)", addr, i, cert.Subject.CommonName),
 			Details: map[string]string{
@@ -222,4 +227,40 @@ func tlsVersionName(version uint16) string {
 	default:
 		return fmt.Sprintf("Unknown (0x%04x)", version)
 	}
+}
+
+// publicKeyBits returns the bit length of a certificate's public key.
+func publicKeyBits(cert *x509.Certificate) int {
+	switch pub := cert.PublicKey.(type) {
+	case *rsa.PublicKey:
+		return pub.N.BitLen()
+	case *ecdsa.PublicKey:
+		return pub.Curve.Params().BitSize
+	case ed25519.PublicKey:
+		return 256
+	default:
+		return 0
+	}
+}
+
+// cipherKeySize extracts the key size from a cipher algorithm name.
+func cipherKeySize(algo string) int {
+	switch {
+	case strings.Contains(algo, "256"):
+		return 256
+	case strings.Contains(algo, "128"):
+		return 128
+	case strings.Contains(algo, "ChaCha20"):
+		return 256
+	default:
+		return 0
+	}
+}
+
+// certIssuerOrg safely extracts the first issuer organization name.
+func certIssuerOrg(cert *x509.Certificate) string {
+	if len(cert.Issuer.Organization) > 0 {
+		return cert.Issuer.Organization[0]
+	}
+	return cert.Issuer.CommonName
 }
