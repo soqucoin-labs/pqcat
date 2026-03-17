@@ -34,7 +34,18 @@ func ClassifyWithReason(algorithm string) (models.Zone, string) {
 		return models.ZoneYellow, "Transitional — hybrid or insufficient security level for NSS"
 	}
 
+	// Check for classically broken or deprecated algorithms
+	if containsAny(alg, []string{"MD5", "SHA-1", "DES", "3DES", "RC4", "BLOWFISH"}) {
+		return models.ZoneRed, "Classically broken or deprecated — prohibited by all modern standards"
+	}
+	if containsAny(alg, []string{"RIPEMD"}) {
+		return models.ZoneRed, "RIPEMD-160 is below CNSA 2.0 minimum hash security — retire"
+	}
+
 	reason := "Quantum vulnerable — broken by Shor's algorithm on a cryptographically relevant quantum computer"
+	if containsAny(alg, []string{"SCHNORR"}) {
+		reason = "Schnorr signatures use ECC — broken by Shor's algorithm on a CRQC"
+	}
 	if containsAny(alg, []string{"AES", "SHA-256", "SHA-384", "SHA-512", "SHA3"}) {
 		reason = "Symmetric/hash algorithm — quantum resistant via Grover's (halved security), but not a PQC signature/KEM"
 	}
@@ -84,18 +95,31 @@ func isYellow(alg string) bool {
 // signature schemes — these must NOT be classified as symmetric-safe.
 func isSymmetricSafe(alg string) bool {
 	// Reject if the algorithm contains any asymmetric prefix
-	asymmetricPrefixes := []string{"ECDSA", "RSA", "ECDH", "ED25519", "DSA", "DH-"}
+	asymmetricPrefixes := []string{
+		"ECDSA", "RSA", "ECDH", "ED25519", "DSA", "DH-",
+		"SCHNORR", "SECP256K1",
+	}
 	if containsAny(alg, asymmetricPrefixes) {
+		return false
+	}
+
+	// Reject classically broken algorithms
+	brokenAlgorithms := []string{"MD5", "SHA-1", "DES", "3DES", "RC4", "BLOWFISH", "RIPEMD"}
+	if containsAny(alg, brokenAlgorithms) {
 		return false
 	}
 
 	safeAlgorithms := []string{
 		// Symmetric ciphers — quantum resistant
 		"AES-256", "AES-128", "AES-192",
-		"CHACHA20", "POLY1305",
+		"CHACHA20", "POLY1305", "XSALSA20",
+		// Non-cryptographic hashes (safe)
+		"SIPHASH", "MUHASH",
 		// Hash functions — quantum resistant (standalone)
 		"SHA-256", "SHA-384", "SHA-512", "SHA3",
 		"HMAC",
+		// EVP placeholder — assume mixed, classify safe until specific
+		"EVP-CRYPTO",
 	}
 	return containsAny(alg, safeAlgorithms)
 }

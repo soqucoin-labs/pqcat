@@ -77,17 +77,109 @@ var cryptoPatterns = []cryptoPattern{
 	{name: "JS bcrypt", regex: regexp.MustCompile(`bcrypt\.(hash|compare)\s*\(`), algorithms: []string{"bcrypt"}, languages: []string{".js", ".ts"}},
 
 	// ═══════════════════════════════════════════════════════════════════
-	// C/C++ Crypto APIs (OpenSSL, libsodium)
+	// C/C++ Crypto APIs — OpenSSL High-Level (EVP)
 	// ═══════════════════════════════════════════════════════════════════
 	{name: "C OpenSSL RSA", regex: regexp.MustCompile(`RSA_generate_key(_ex)?\s*\(`), algorithms: []string{"RSA-2048"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
 	{name: "C OpenSSL EVP Sign", regex: regexp.MustCompile(`EVP_DigestSign(Init|Update|Final)\s*\(`), algorithms: []string{"RSA-2048"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C OpenSSL EVP Verify", regex: regexp.MustCompile(`EVP_DigestVerify(Init|Update|Final)\s*\(`), algorithms: []string{"RSA-2048"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
 	{name: "C OpenSSL EC Key", regex: regexp.MustCompile(`EC_KEY_(new_by_curve_name|generate_key)\s*\(`), algorithms: []string{"ECDSA-P256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
-	{name: "C OpenSSL AES", regex: regexp.MustCompile(`EVP_aes_(128|256)_(gcm|cbc|ctr)\s*\(`), algorithms: []string{"AES-256-GCM"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
-	{name: "C OpenSSL SHA", regex: regexp.MustCompile(`EVP_sha(256|384|512)\s*\(`), algorithms: []string{"SHA-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C OpenSSL ECDSA Sign", regex: regexp.MustCompile(`ECDSA_(sign|verify|do_sign|do_verify)\s*\(`), algorithms: []string{"ECDSA-P256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C OpenSSL EVP AES", regex: regexp.MustCompile(`EVP_aes_(128|256)_(gcm|cbc|ctr|ecb)\s*\(`), algorithms: []string{"AES-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C OpenSSL EVP SHA", regex: regexp.MustCompile(`EVP_sha(1|256|384|512)\s*\(`), algorithms: []string{"SHA-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C OpenSSL EVP MD5", regex: regexp.MustCompile(`EVP_md5\s*\(`), algorithms: []string{"MD5"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
 	{name: "C OpenSSL TLS", regex: regexp.MustCompile(`SSL_CTX_new\s*\(`), algorithms: []string{"TLS"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
-	{name: "C libsodium sign", regex: regexp.MustCompile(`crypto_sign(_ed25519)?\s*\(`), algorithms: []string{"Ed25519"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
-	{name: "C libsodium box", regex: regexp.MustCompile(`crypto_box(_curve25519)?\s*\(`), algorithms: []string{"X25519"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
-	{name: "C libsodium aead", regex: regexp.MustCompile(`crypto_aead_chacha20poly1305\s*\(`), algorithms: []string{"ChaCha20-Poly1305"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C OpenSSL EVP PKEY", regex: regexp.MustCompile(`EVP_PKEY_(new|keygen|derive)\s*\(`), algorithms: []string{"RSA-2048"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C OpenSSL DH", regex: regexp.MustCompile(`DH_(generate_parameters|generate_key|compute_key)\s*\(`), algorithms: []string{"DH-2048"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+
+	// ═══════════════════════════════════════════════════════════════════
+	// C/C++ — OpenSSL Low-Level / Raw APIs
+	// ═══════════════════════════════════════════════════════════════════
+	{name: "C Raw SHA256", regex: regexp.MustCompile(`SHA256_(Init|Update|Final)\s*\(`), algorithms: []string{"SHA-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C Raw SHA512", regex: regexp.MustCompile(`SHA512_(Init|Update|Final)\s*\(`), algorithms: []string{"SHA-512"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C Raw SHA1", regex: regexp.MustCompile(`SHA1_(Init|Update|Final)\s*\(`), algorithms: []string{"SHA-1"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C Raw MD5", regex: regexp.MustCompile(`MD5_(Init|Update|Final)\s*\(`), algorithms: []string{"MD5"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C Raw SHA256 oneshot", regex: regexp.MustCompile(`SHA256\s*\([^)]*,[^)]*,[^)]*\)`), algorithms: []string{"SHA-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C Raw SHA512 oneshot", regex: regexp.MustCompile(`SHA512\s*\([^)]*,[^)]*,[^)]*\)`), algorithms: []string{"SHA-512"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C Raw AES encrypt", regex: regexp.MustCompile(`AES_(set_encrypt_key|set_decrypt_key|encrypt|cbc_encrypt)\s*\(`), algorithms: []string{"AES-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C Raw HMAC", regex: regexp.MustCompile(`HMAC\s*\(\s*EVP_`), algorithms: []string{"HMAC-SHA256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C Raw HMAC CTX", regex: regexp.MustCompile(`HMAC_CTX_(new|init|update|final)\s*\(`), algorithms: []string{"HMAC-SHA256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C Raw RIPEMD160", regex: regexp.MustCompile(`RIPEMD160_(Init|Update|Final)\s*\(`), algorithms: []string{"RIPEMD-160"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+
+	// ═══════════════════════════════════════════════════════════════════
+	// C/C++ — Bitcoin Core / libsecp256k1 Custom Crypto
+	// ═══════════════════════════════════════════════════════════════════
+	{name: "C++ Bitcoin CSHA256", regex: regexp.MustCompile(`CSHA256\b`), algorithms: []string{"SHA-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C++ Bitcoin CSHA512", regex: regexp.MustCompile(`CSHA512\b`), algorithms: []string{"SHA-512"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C++ Bitcoin CHash256", regex: regexp.MustCompile(`CHash256\b`), algorithms: []string{"SHA-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C++ Bitcoin CHash160", regex: regexp.MustCompile(`CHash160\b`), algorithms: []string{"RIPEMD-160"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C++ Bitcoin CRIPEMD160", regex: regexp.MustCompile(`CRIPEMD160\b`), algorithms: []string{"RIPEMD-160"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C++ Bitcoin CHMAC SHA256", regex: regexp.MustCompile(`CHMAC_SHA256\b`), algorithms: []string{"HMAC-SHA256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C++ Bitcoin CHMAC SHA512", regex: regexp.MustCompile(`CHMAC_SHA512\b`), algorithms: []string{"HMAC-SHA512"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C++ Bitcoin AES256Encrypt", regex: regexp.MustCompile(`AES256(Encrypt|Decrypt|CBCEncrypt|CBCDecrypt)\b`), algorithms: []string{"AES-256-CBC"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C++ Bitcoin AES128Encrypt", regex: regexp.MustCompile(`AES128(Encrypt|Decrypt|CBCEncrypt|CBCDecrypt)\b`), algorithms: []string{"AES-128-CBC"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C++ Bitcoin CKey", regex: regexp.MustCompile(`\bCKey\b`), algorithms: []string{"ECDSA-secp256k1"}, languages: []string{".cpp", ".h"}},
+	{name: "C++ Bitcoin CPubKey", regex: regexp.MustCompile(`\bCPubKey\b`), algorithms: []string{"ECDSA-secp256k1"}, languages: []string{".cpp", ".h"}},
+	{name: "C++ Bitcoin CExtKey", regex: regexp.MustCompile(`\bCExtKey\b`), algorithms: []string{"ECDSA-secp256k1"}, languages: []string{".cpp", ".h"}},
+	{name: "C++ Bitcoin CExtPubKey", regex: regexp.MustCompile(`\bCExtPubKey\b`), algorithms: []string{"ECDSA-secp256k1"}, languages: []string{".cpp", ".h"}},
+	{name: "C secp256k1 ECDSA sign", regex: regexp.MustCompile(`secp256k1_ecdsa_sign\b`), algorithms: []string{"ECDSA-secp256k1"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C secp256k1 ECDSA verify", regex: regexp.MustCompile(`secp256k1_ecdsa_verify\b`), algorithms: []string{"ECDSA-secp256k1"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C secp256k1 Schnorr sign", regex: regexp.MustCompile(`secp256k1_schnorrsig_sign`), algorithms: []string{"Schnorr-secp256k1"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C secp256k1 Schnorr verify", regex: regexp.MustCompile(`secp256k1_schnorrsig_verify\b`), algorithms: []string{"Schnorr-secp256k1"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C secp256k1 ECDH", regex: regexp.MustCompile(`secp256k1_ecdh\b`), algorithms: []string{"ECDH-secp256k1"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C secp256k1 keypair", regex: regexp.MustCompile(`secp256k1_(ec_pubkey_create|keypair_create|ec_seckey_verify)\b`), algorithms: []string{"ECDSA-secp256k1"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C secp256k1 context", regex: regexp.MustCompile(`secp256k1_context_(create|destroy)\b`), algorithms: []string{"ECDSA-secp256k1"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C secp256k1 recovery", regex: regexp.MustCompile(`secp256k1_ecdsa_recover(able_signature_parse|_pubkey)?\b`), algorithms: []string{"ECDSA-secp256k1"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C++ Bitcoin ChaCha20", regex: regexp.MustCompile(`\bChaCha20\b`), algorithms: []string{"ChaCha20"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C++ Bitcoin Poly1305", regex: regexp.MustCompile(`\bPoly1305\b`), algorithms: []string{"Poly1305"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C++ Bitcoin ChaCha20Poly1305", regex: regexp.MustCompile(`ChaCha20Poly1305\b`), algorithms: []string{"ChaCha20-Poly1305"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C++ Bitcoin SipHash", regex: regexp.MustCompile(`\bCSipHasher\b`), algorithms: []string{"SipHash"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C++ Bitcoin MuHash", regex: regexp.MustCompile(`\bMuHash3072\b`), algorithms: []string{"MuHash-3072"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C++ Bitcoin PBKDF2", regex: regexp.MustCompile(`PBKDF2_SHA256\b`), algorithms: []string{"PBKDF2-SHA256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+
+	// ═══════════════════════════════════════════════════════════════════
+	// C/C++ — Crypto Header Includes (broad detection)
+	// ═══════════════════════════════════════════════════════════════════
+	{name: "C include openssl/sha", regex: regexp.MustCompile(`#include\s*[<"]openssl/sha\.h[>"]`), algorithms: []string{"SHA-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C include openssl/rsa", regex: regexp.MustCompile(`#include\s*[<"]openssl/rsa\.h[>"]`), algorithms: []string{"RSA-2048"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C include openssl/ec", regex: regexp.MustCompile(`#include\s*[<"]openssl/ec\.h[>"]`), algorithms: []string{"ECDSA-P256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C include openssl/ecdsa", regex: regexp.MustCompile(`#include\s*[<"]openssl/ecdsa\.h[>"]`), algorithms: []string{"ECDSA-P256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C include openssl/aes", regex: regexp.MustCompile(`#include\s*[<"]openssl/aes\.h[>"]`), algorithms: []string{"AES-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C include openssl/hmac", regex: regexp.MustCompile(`#include\s*[<"]openssl/hmac\.h[>"]`), algorithms: []string{"HMAC-SHA256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C include openssl/ripemd", regex: regexp.MustCompile(`#include\s*[<"]openssl/ripemd\.h[>"]`), algorithms: []string{"RIPEMD-160"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C include openssl/dh", regex: regexp.MustCompile(`#include\s*[<"]openssl/dh\.h[>"]`), algorithms: []string{"DH-2048"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C include openssl/evp", regex: regexp.MustCompile(`#include\s*[<"]openssl/evp\.h[>"]`), algorithms: []string{"EVP-Crypto"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C include openssl/ssl", regex: regexp.MustCompile(`#include\s*[<"]openssl/ssl\.h[>"]`), algorithms: []string{"TLS"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C include openssl/des", regex: regexp.MustCompile(`#include\s*[<"]openssl/des\.h[>"]`), algorithms: []string{"DES"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C include openssl/md5", regex: regexp.MustCompile(`#include\s*[<"]openssl/md5\.h[>"]`), algorithms: []string{"MD5"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+
+	// ═══════════════════════════════════════════════════════════════════
+	// C/C++ — Generic Crypto (mbedTLS, wolfSSL, Botan, BoringSSL)
+	// ═══════════════════════════════════════════════════════════════════
+	{name: "C mbedTLS RSA", regex: regexp.MustCompile(`mbedtls_rsa_(init|gen_key|pkcs1_sign)\s*\(`), algorithms: []string{"RSA-2048"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C mbedTLS ECDSA", regex: regexp.MustCompile(`mbedtls_ecdsa_(write_signature|read_signature|sign|verify)\s*\(`), algorithms: []string{"ECDSA-P256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C mbedTLS SHA256", regex: regexp.MustCompile(`mbedtls_sha256\s*\(`), algorithms: []string{"SHA-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C mbedTLS AES", regex: regexp.MustCompile(`mbedtls_aes_(setkey_enc|crypt_cbc|crypt_ecb)\s*\(`), algorithms: []string{"AES-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C wolfSSL SHA256", regex: regexp.MustCompile(`wc_Sha256(Update|Final|Hash)\s*\(`), algorithms: []string{"SHA-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C wolfSSL RSA", regex: regexp.MustCompile(`wc_Rsa(PublicEncrypt|PrivateDecrypt|SSL_Sign)\s*\(`), algorithms: []string{"RSA-2048"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C wolfSSL ECC", regex: regexp.MustCompile(`wc_ecc_(sign_hash|verify_hash|make_key)\s*\(`), algorithms: []string{"ECDSA-P256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+
+	// ═══════════════════════════════════════════════════════════════════
+	// C/C++ — libsodium
+	// ═══════════════════════════════════════════════════════════════════
+	{name: "C libsodium sign", regex: regexp.MustCompile(`crypto_sign(_ed25519)?(_detached|_open|_verify_detached)?\s*\(`), algorithms: []string{"Ed25519"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C libsodium box", regex: regexp.MustCompile(`crypto_box(_curve25519xsalsa20poly1305)?(_open|_seal|_seal_open)?\s*\(`), algorithms: []string{"X25519"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C libsodium aead", regex: regexp.MustCompile(`crypto_aead_(chacha20poly1305|xchacha20poly1305|aes256gcm)_`), algorithms: []string{"ChaCha20-Poly1305"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C libsodium secretbox", regex: regexp.MustCompile(`crypto_secretbox(_open|_detached)?\s*\(`), algorithms: []string{"XSalsa20-Poly1305"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C libsodium hash", regex: regexp.MustCompile(`crypto_hash_sha(256|512)\s*\(`), algorithms: []string{"SHA-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C libsodium kx", regex: regexp.MustCompile(`crypto_kx_(client_session_keys|server_session_keys)\s*\(`), algorithms: []string{"X25519"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+
+	// ═══════════════════════════════════════════════════════════════════
+	// C/C++ — Generic Patterns (catch-all for custom implementations)
+	// ═══════════════════════════════════════════════════════════════════
+	{name: "C/C++ DES usage", regex: regexp.MustCompile(`\bDES_(ecb_encrypt|cbc_encrypt|set_key)\s*\(`), algorithms: []string{"DES"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C/C++ 3DES usage", regex: regexp.MustCompile(`\bDES_ede3_(cbc_encrypt|ecb_encrypt)\s*\(`), algorithms: []string{"3DES"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C/C++ Blowfish", regex: regexp.MustCompile(`\bBF_(set_key|ecb_encrypt|cbc_encrypt)\s*\(`), algorithms: []string{"Blowfish"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C/C++ RC4", regex: regexp.MustCompile(`\bRC4\s*\(`), algorithms: []string{"RC4"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
 
 	// ═══════════════════════════════════════════════════════════════════
 	// Rust Crypto APIs
@@ -230,11 +322,22 @@ func scanFileForCrypto(path string) []models.CryptoAsset {
 		lineNum++
 		line := scanner.Text()
 
-		// Skip comments (simple heuristic)
+		// Skip comments (language-aware heuristic)
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "#") ||
-			strings.HasPrefix(trimmed, "*") || strings.HasPrefix(trimmed, "/*") {
+		// C-style single and multi-line comment openers (all languages)
+		if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*") {
 			continue
+		}
+		// '#' is a comment in Python/Ruby/Shell/PHP — but NOT in C/C++ (it's #include/#define)
+		if strings.HasPrefix(trimmed, "#") && ext != ".c" && ext != ".cpp" && ext != ".h" && ext != ".hpp" {
+			continue
+		}
+		// In C/C++, skip preprocessor lines that are clearly NOT crypto-relevant
+		// (but keep #include which our patterns match)
+		if (ext == ".c" || ext == ".cpp" || ext == ".h" || ext == ".hpp") && strings.HasPrefix(trimmed, "#") {
+			if !strings.HasPrefix(trimmed, "#include") {
+				continue
+			}
 		}
 
 		for _, pattern := range cryptoPatterns {
