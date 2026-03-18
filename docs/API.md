@@ -78,7 +78,7 @@ API key authentication grants **admin** privileges.
 ```json
 {
   "target": "soqucoin.com",
-  "scan_type": "tls|ssh|sbom|pki|code|hsm|cidr|scap|all",
+  "scan_type": "tls|ssh|sbom|pki|code|hsm|cidr",
   "framework": "cnsa2|fisma|fedramp|dod|nist",
   "criticality": "STANDARD|HVA|NSS"
 }
@@ -89,11 +89,9 @@ API key authentication grants **admin** privileges.
 - `ssh` — SSH key exchange and host key algorithm analysis  
 - `sbom` — CycloneDX/SPDX dependency analysis (180+ library database)
 - `pki` — Certificate authority chain walking
-- `code` — Source code scanning with 60+ crypto patterns
+- `code` — Source code scanning with 579 crypto patterns across 39 file types
 - `hsm` — Hardware security module key discovery
 - `cidr` — Subnet-wide TLS/SSH range scanning
-- `scap` — OpenSCAP XCCDF results import
-- `all` — **Smart auto-detect**: routes to applicable scanners based on target type
 
 **Response:**
 ```json

@@ -21,7 +21,7 @@ PQCAT uses a four-layer architecture separating discovery, intelligence, securit
 │  SQLite Persistence · Scheduled Scans · Alerts          │
 ├──────────────────────────────────────────────────────────┤
 │                   DISCOVERY LAYER                        │
-│  TLS · SSH · SBOM · CIDR · PKI · Code · HSM · SCAP     │
+│  TLS · SSH · SBOM · CIDR · PKI · Code · HSM             │
 │  Algorithm Classifier (CNSA 2.0 / FIPS mapping)         │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -37,7 +37,7 @@ pqcat/
 │   ├── config/         # YAML config + env var loader
 │   ├── models/         # Core data types (ScanResult, CryptoAsset, etc.)
 │   ├── reporter/       # Output: PDF, HTML, JSON, terminal
-│   ├── scanner/        # 9 discovery modules
+│   ├── scanner/        # 7 discovery modules
 │   ├── server/         # REST API + web dashboard (Pro only)
 │   │   ├── server.go         # Core server, routes, dashboard HTML
 │   │   ├── server_rbac.go    # RBAC middleware, session auth, user/audit handlers

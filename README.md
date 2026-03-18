@@ -21,7 +21,7 @@ pqcat scan tls agency.gov --framework fisma --html report.html --save-db
 
 | Feature | Enclave (Air-Gapped) | Pro (Connected) |
 |---|---|---|
-| CLI scanner (9 modules) | ✓ | ✓ |
+| CLI scanner (7 modules) | ✓ | ✓ |
 | TUI terminal dashboard | ✓ | ✓ |
 | Self-contained HTML reports | ✓ | ✓ |
 | SQLite scan history & POA&M | ✓ | ✓ |
@@ -61,11 +61,10 @@ make
 | SSH | `scan ssh` | Key exchange, host key types |
 | SBOM | `scan sbom` | CycloneDX/SPDX crypto dependency analysis |
 | PKI | `scan pki` | Certificate chain walking and CA analysis |
-| Code | `scan code` | Source code pattern scanning (60+ regex) |
+| Code | `scan code` | Source code pattern scanning (579 patterns, 39 file types) |
 | HSM/KMS | `scan hsm` | Hardware security module key discovery |
 | CIDR | `scan cidr` | Subnet-wide TLS/SSH discovery |
-| OpenSCAP | `scan scap` | Import XCCDF results for PQC assessment |
-| Aggregate | `scan all` | Run all applicable modules |
+
 
 ## Build
 
@@ -111,7 +110,7 @@ PQCAT Pro includes enterprise-grade security out of the box:
 
 ```
 ┌── Discovery Layer ──────────────── Open Source (Apache 2.0) ──┐
-│  9 scanner modules + algorithm classifier + data models       │
+│  7 scanner modules + algorithm classifier + data models       │
 ├── Intelligence Layer ────────────── Proprietary ──────────────┤
 │  Compliance engine + scoring + threat intel                   │
 ├── Security Layer ─────────────────────────────────────────────┤

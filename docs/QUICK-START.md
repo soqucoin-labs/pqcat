@@ -4,14 +4,14 @@
 
 ```bash
 # Step 1: Download from releases
-curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v1.1.0/pqcat-1.1.0-linux-amd64.tar.gz
+curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v2.0.1/pqcat-2.0.1-linux-amd64.tar.gz
 
 # Step 2: Extract the binary
-tar xzf pqcat-1.1.0-linux-amd64.tar.gz
+tar xzf pqcat-2.0.1-linux-amd64.tar.gz
 
 # Step 3: Install to your PATH
-chmod +x pqcat-1.1.0-linux-amd64
-sudo mv pqcat-1.1.0-linux-amd64 /usr/local/bin/pqcat
+chmod +x pqcat-2.0.1-linux-amd64
+sudo mv pqcat-2.0.1-linux-amd64 /usr/local/bin/pqcat
 
 # From source
 git clone https://github.com/soqucoin-labs/pqcat.git && cd pqcat
@@ -39,11 +39,6 @@ pqcat scan code ./src/
 # Scan PKI certificates
 pqcat scan pki /etc/ssl/certs/
 
-# Import OpenSCAP results
-pqcat scan scap results.xml
-
-# Run all applicable scanners
-pqcat scan all example.com
 ```
 
 ## Generate Reports
@@ -120,8 +115,6 @@ pqcat scan tls example.com --baseline baseline.json
 | `scan pki PATH` | Scan PKI certificates |
 | `scan code DIR` | Scan source code for crypto APIs |
 | `scan hsm [auto]` | Discover HSMs, KMS, keystores |
-| `scan scap FILE` | Import OpenSCAP XCCDF/ARF results |
-| `scan all HOST` | Run all applicable scanners |
 | `simulate TYPE TARGET` | Model PQC migration timeline |
 | `serve` | Start web dashboard (Pro) |
 | `dashboard` | Terminal dashboard (TUI) |

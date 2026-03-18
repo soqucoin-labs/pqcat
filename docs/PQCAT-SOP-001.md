@@ -71,8 +71,7 @@ Both editions are built from the same codebase using Go build tags. The Enclave 
 ```
 ┌──────────────────────────────────────────────────┐
 │  DISCOVERY LAYER         [Open Source, Apache 2.0] │
-│  TLS · SSH · SBOM · PKI · Code · HSM · SCAP      │
-│  CIDR Range · Aggregate Scan                       │
+│  TLS · SSH · SBOM · PKI · Code · HSM · CIDR            │
 ├──────────────────────────────────────────────────┤
 │  INTELLIGENCE LAYER      [Proprietary]             │
 │  Compliance Engine · Scoring · Threat Intel        │
@@ -87,7 +86,7 @@ Both editions are built from the same codebase using Go build tags. The Enclave 
 
 | Capability | Enclave | Pro |
 |---|---|---|
-| CLI scanner (9 modules) | ✓ | ✓ |
+| CLI scanner (7 modules) | ✓ | ✓ |
 | TUI terminal dashboard | ✓ | ✓ |
 | Self-contained HTML reports | ✓ | ✓ |
 | SQLite scan history & POA&M | ✓ | ✓ |
@@ -107,7 +106,7 @@ Both editions are built from the same codebase using Go build tags. The Enclave 
 
 | Component | License | Source |
 |---|---|---|
-| Scanner modules (9) | Apache 2.0 | Open source — `github.com/soqucoin-labs/pqcat` |
+| Scanner modules (7) | Apache 2.0 | Open source — `github.com/soqucoin-labs/pqcat` |
 | Algorithm classifier | Apache 2.0 | Open source — `github.com/soqucoin-labs/pqcat` |
 | Data models | Apache 2.0 | Open source — `github.com/soqucoin-labs/pqcat` |
 | Config loader | Apache 2.0 | Open source — `github.com/soqucoin-labs/pqcat` |
@@ -134,7 +133,7 @@ Both editions are built from the same codebase using Go build tags. The Enclave 
 ```bash
 # Download release binary from GitHub Releases
 # https://github.com/soqucoin-labs/pqcat/releases
-curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v1.1.0/pqcat-linux-amd64
+curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v2.0.1/pqcat-linux-amd64
 chmod +x pqcat-linux-amd64
 mv pqcat-linux-amd64 /usr/local/bin/pqcat
 
@@ -280,11 +279,10 @@ All configuration fields can be overridden via `PQCAT_` prefixed environment var
 | SSH | `pqcat scan ssh <target>` | Key exchange algorithms, host key types |
 | SBOM | `pqcat scan sbom <path>` | CycloneDX/SPDX bill-of-materials crypto analysis |
 | PKI | `pqcat scan pki <path>` | Certificate chain walking and CA analysis |
-| Code | `pqcat scan code <path>` | Source code scanning for crypto patterns (60+ regex) |
+| Code | `pqcat scan code <path>` | Source code scanning for crypto patterns (579 patterns, 39 file types) |
 | HSM/KMS | `pqcat scan hsm <endpoint>` | Hardware security module key type discovery |
 | CIDR | `pqcat scan cidr <range>` | Network subnet scanning for TLS/SSH endpoints |
-| OpenSCAP | `pqcat scan scap <path>` | Import OpenSCAP XCCDF results for PQC assessment |
-| All | `pqcat scan all <target>` | Execute all applicable scan types |
+
 
 ### 8.2 Common CLI Flags
 
@@ -543,10 +541,10 @@ PQCAT generates its own CycloneDX SBOM via `make sbom`:
 
 ```bash
 make sbom
-# Generates pqcat-v1.1.0.cdx.json
+# Generates pqcat-v2.0.1.cdx.json
 
 # Self-scan PQCAT's own dependencies
-pqcat scan sbom pqcat-v1.1.0.cdx.json --framework nist
+pqcat scan sbom pqcat-v2.0.1.cdx.json --framework nist
 ```
 
 ## 13. Security Considerations
@@ -909,6 +907,8 @@ stateDiagram-v2
 | 1.0 | 2026-03-05 | Soqucoin Labs Inc. | Initial release |
 | 1.1 | 2026-03-05 | Soqucoin Labs Inc. | Added Appendix A: State Machine Analysis |
 | 1.2 | 2026-03-10 | Soqucoin Labs Inc. | Updated for v1.1.0: RBAC, session auth, HMAC audit, Prometheus metrics, corrected API paths |
+| 1.3 | 2026-03-18 | Soqucoin Labs Inc. | Updated for v2.0.0: corrected module count (9→7), code scanner patterns (60+→499), download URLs |
+| 1.4 | 2026-03-18 | Soqucoin Labs Inc. | Updated for v2.0.1: code scanner patterns (499→579, +80 PQC detection patterns), download URLs, SBOM filenames |
 
 ---
 

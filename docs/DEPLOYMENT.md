@@ -9,17 +9,17 @@
 
 ```bash
 # Step 1: Download from releases
-curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v1.1.0/pqcat-1.1.0-linux-amd64.tar.gz
+curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v2.0.1/pqcat-2.0.1-linux-amd64.tar.gz
 
 # Step 2: Extract the binary
-tar xzf pqcat-1.1.0-linux-amd64.tar.gz
+tar xzf pqcat-2.0.1-linux-amd64.tar.gz
 
 # Step 3: Install to your PATH
-chmod +x pqcat-1.1.0-linux-amd64
-sudo mv pqcat-1.1.0-linux-amd64 /usr/local/bin/pqcat
+chmod +x pqcat-2.0.1-linux-amd64
+sudo mv pqcat-2.0.1-linux-amd64 /usr/local/bin/pqcat
 
 # Verify checksum (SHA-384, CNSA 2.0 compliant)
-curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v1.1.0/checksums.sha384
+curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v2.0.1/checksums.sha384
 shasum -a 384 -c checksums.sha384
 
 # Run
@@ -163,7 +163,7 @@ server {
 
 ```bash
 curl http://localhost:8443/api/health
-# {"status":"ok","version":"1.1.0","edition":"Pro"}
+# {"status":"ok","version":"2.0.1","edition":"Pro"}
 ```
 
 ## Code Signing

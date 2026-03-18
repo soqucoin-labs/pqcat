@@ -35,7 +35,7 @@ go test -tags connected ./internal/server/ -count=1
 | `internal/config` | YAML configuration with 6-level precedence chain + env var overrides |
 | `internal/models` | Shared types: CryptoAsset, ScanResult, Zone, Criticality |
 | `internal/reporter` | Report generators: HTML, PDF, JSON, Executive, ATO |
-| `internal/scanner` | 9 scanner modules: TLS, SSH, SBOM, PKI, Code, HSM, CIDR, SCAP, Aggregate |
+| `internal/scanner` | 7 scanner modules: TLS, SSH, SBOM, PKI, Code, HSM, CIDR |
 | `internal/server` | REST API, web dashboard, RBAC, Prometheus metrics (Pro, build tag `connected`) |
 | `internal/store` | SQLite persistence, user CRUD, HMAC-chained audit log (pure Go, no CGO) |
 | `internal/tui` | Terminal dashboard (Enclave edition) |
