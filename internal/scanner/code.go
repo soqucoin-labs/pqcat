@@ -754,6 +754,102 @@ var cryptoPatterns = []cryptoPattern{
 	{name: "PHP hash_hmac", regex: regexp.MustCompile(`hash_hmac\s*\(`), algorithms: []string{"HMAC-SHA256"}, languages: []string{".php"}},
 	{name: "PHP hash_pbkdf2", regex: regexp.MustCompile(`hash_pbkdf2\s*\(`), algorithms: []string{"PBKDF2"}, languages: []string{".php"}},
 	{name: "PHP mcrypt deprecated", regex: regexp.MustCompile(`mcrypt_(encrypt|decrypt|create_iv|module_open)\s*\(`), algorithms: []string{"3DES"}, languages: []string{".php"}},
+
+	// ═══════════════════════════════════════════════════════════════════
+	// POST-QUANTUM CRYPTOGRAPHY (PQC) — FIPS 203/204/205 Algorithms
+	// Detects implementations AND library usage of ML-DSA, ML-KEM, SLH-DSA
+	// ═══════════════════════════════════════════════════════════════════
+
+	// ─── CRYSTALS-Dilithium / ML-DSA (FIPS 204) — Digital Signatures ───
+	// Reference implementation function names (pqcrystals project)
+	{name: "PQC CRYSTALS-Dilithium keypair", regex: regexp.MustCompile(`(pqcrystals_dilithium\d?_?(ref|avx2)?_?(keypair|signature|verify|open))\b`), algorithms: []string{"ML-DSA-65"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC Dilithium crypto_sign", regex: regexp.MustCompile(`\bcrypto_sign_(keypair|signature|verify)\b`), algorithms: []string{"ML-DSA-65"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC Dilithium NAMESPACE macro", regex: regexp.MustCompile(`DILITHIUM_NAMESPACE\b`), algorithms: []string{"ML-DSA-65"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC Dilithium MODE define", regex: regexp.MustCompile(`DILITHIUM_MODE\b`), algorithms: []string{"ML-DSA-65"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC Dilithium params header", regex: regexp.MustCompile(`#include\s*[<"].*dilithium.*(params|sign|api|poly|ntt|config)\.h[>"]`), algorithms: []string{"ML-DSA-65"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC Dilithium directory include", regex: regexp.MustCompile(`#include\s*[<"].*dilithium/`), algorithms: []string{"ML-DSA-65"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC Dilithium polyvec operations", regex: regexp.MustCompile(`\b(polyveck_|polyvecl_)(ntt|reduce|add|sub|chknorm|uniform_eta|uniform_gamma1|pointwise)\b`), algorithms: []string{"ML-DSA-65"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC Dilithium core functions", regex: regexp.MustCompile(`\b(dilithium_sign|dilithium_verify|dilithium_keygen|DilithiumKey|DilithiumPubKey|CDilithiumKey|CDilithiumPubKey)\b`), algorithms: []string{"ML-DSA-65"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC FIPS202 (SHA-3 for Dilithium)", regex: regexp.MustCompile(`FIPS202_NAMESPACE\b`), algorithms: []string{"ML-DSA-65"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	// Consensus/blockchain Dilithium integration
+	{name: "PQC Dilithium consensus", regex: regexp.MustCompile(`\b(dilithiumOnlyHeight|DILITHIUM_VERIFY_COST|dilithium_only|isDilithium|IsDilithium)\b`), algorithms: []string{"ML-DSA-65"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+
+	// ─── CRYSTALS-Kyber / ML-KEM (FIPS 203) — Key Encapsulation ───
+	{name: "PQC CRYSTALS-Kyber functions", regex: regexp.MustCompile(`(pqcrystals_kyber\d*_?(ref|avx2)?_?(keypair|enc|dec))\b`), algorithms: []string{"ML-KEM-768"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC Kyber crypto_kem", regex: regexp.MustCompile(`\bcrypto_kem_(keypair|enc|dec)\b`), algorithms: []string{"ML-KEM-768"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC Kyber NAMESPACE macro", regex: regexp.MustCompile(`KYBER_NAMESPACE\b`), algorithms: []string{"ML-KEM-768"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC Kyber params header", regex: regexp.MustCompile(`#include\s*[<"].*kyber.*(params|kem|api|poly|ntt|indcpa)\.h[>"]`), algorithms: []string{"ML-KEM-768"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC Kyber directory include", regex: regexp.MustCompile(`#include\s*[<"].*kyber/`), algorithms: []string{"ML-KEM-768"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+
+	// ─── SPHINCS+ / SLH-DSA (FIPS 205) — Hash-Based Signatures ───
+	{name: "PQC SPHINCS+ functions", regex: regexp.MustCompile(`(crypto_sign_sphincs|sphincs_sign|sphincs_verify|SPX_)`), algorithms: []string{"SLH-DSA"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC SPHINCS+ include", regex: regexp.MustCompile(`#include\s*[<"].*sphincs`), algorithms: []string{"SLH-DSA"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC SPHINCS+ namespace", regex: regexp.MustCompile(`SPHINCS_NAMESPACE\b`), algorithms: []string{"SLH-DSA"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+
+	// ─── Falcon — Lattice-Based Signatures ───
+	{name: "PQC Falcon functions", regex: regexp.MustCompile(`(falcon_sign|falcon_verify|falcon_keygen|falcon_make_public|falcon\d+_)`), algorithms: []string{"Falcon-512"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC Falcon include", regex: regexp.MustCompile(`#include\s*[<"].*falcon`), algorithms: []string{"Falcon-512"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+
+	// ─── liboqs (Open Quantum Safe) — C Library ───
+	{name: "PQC liboqs SIG", regex: regexp.MustCompile(`\bOQS_SIG_(new|sign|verify|keypair|free)\s*\(`), algorithms: []string{"ML-DSA-65"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC liboqs KEM", regex: regexp.MustCompile(`\bOQS_KEM_(new|keypair|encaps|decaps|free)\s*\(`), algorithms: []string{"ML-KEM-768"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC liboqs algorithm name", regex: regexp.MustCompile(`OQS_SIG_alg_(dilithium|ml_dsa|falcon|sphincs|slh_dsa)`), algorithms: []string{"ML-DSA-65"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC liboqs KEM algorithm name", regex: regexp.MustCompile(`OQS_KEM_alg_(kyber|ml_kem|hqc|bike|frodokem)`), algorithms: []string{"ML-KEM-768"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC liboqs include", regex: regexp.MustCompile(`#include\s*[<"](oqs/oqs|oqs/sig|oqs/kem)\.h[>"]`), algorithms: []string{"ML-DSA-65"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+
+	// ─── Go PQC Libraries ───
+	// Cloudflare circl (widely used in Go PQC)
+	{name: "PQC Go circl dilithium", regex: regexp.MustCompile(`circl/sign/(dilithium|ed448)`), algorithms: []string{"ML-DSA-65"}, languages: []string{".go"}},
+	{name: "PQC Go circl kyber", regex: regexp.MustCompile(`circl/kem/kyber`), algorithms: []string{"ML-KEM-768"}, languages: []string{".go"}},
+	{name: "PQC Go circl schemes", regex: regexp.MustCompile(`circl/sign/schemes`), algorithms: []string{"ML-DSA-65"}, languages: []string{".go"}},
+	{name: "PQC Go circl import", regex: regexp.MustCompile(`"github\.com/cloudflare/circl`), algorithms: []string{"ML-DSA-65"}, languages: []string{".go"}},
+	// Go pqcrypto
+	{name: "PQC Go pqcrypto sign", regex: regexp.MustCompile(`pqcrypto\.(sign|kem)\b`), algorithms: []string{"ML-DSA-65"}, languages: []string{".go"}},
+	// Go standard library (post-Go 1.23 PQC experiment)
+	{name: "PQC Go crypto/mlkem", regex: regexp.MustCompile(`crypto/ml(kem|dsa)`), algorithms: []string{"ML-KEM-768"}, languages: []string{".go"}},
+
+	// ─── Python PQC Libraries ───
+	{name: "PQC Python pqcrypto", regex: regexp.MustCompile(`pqcrypto\.(sign|kem)\.(dilithium|kyber|sphincs|falcon)`), algorithms: []string{"ML-DSA-65"}, languages: []string{".py"}},
+	{name: "PQC Python pqcrypto import", regex: regexp.MustCompile(`from\s+pqcrypto\.(sign|kem)\s+import`), algorithms: []string{"ML-DSA-65"}, languages: []string{".py"}},
+	{name: "PQC Python oqs", regex: regexp.MustCompile(`oqs\.(Signature|KeyEncapsulation)\s*\(`), algorithms: []string{"ML-DSA-65"}, languages: []string{".py"}},
+	{name: "PQC Python oqs import", regex: regexp.MustCompile(`import\s+oqs`), algorithms: []string{"ML-DSA-65"}, languages: []string{".py"}},
+	{name: "PQC Python pyspx", regex: regexp.MustCompile(`pyspx\.(sign|verify|keygen)`), algorithms: []string{"SLH-DSA"}, languages: []string{".py"}},
+
+	// ─── Java PQC Libraries ───
+	// Bouncy Castle PQC (extends the existing BC section above)
+	{name: "PQC Java BC ML-DSA", regex: regexp.MustCompile(`\b(MLDSAParameterSpec|MLDSAKeyPairGenerator|MLDSASigner)\b`), algorithms: []string{"ML-DSA-65"}, languages: []string{".java", ".kt", ".kts"}},
+	{name: "PQC Java BC ML-KEM", regex: regexp.MustCompile(`\b(MLKEMParameterSpec|MLKEMKeyPairGenerator|MLKEMExtractor|MLKEMGenerator)\b`), algorithms: []string{"ML-KEM-768"}, languages: []string{".java", ".kt", ".kts"}},
+	{name: "PQC Java BC SLH-DSA", regex: regexp.MustCompile(`\b(SLHDSAParameterSpec|SLHDSAKeyPairGenerator|SLHDSASigner)\b`), algorithms: []string{"SLH-DSA"}, languages: []string{".java", ".kt", ".kts"}},
+	{name: "PQC Java BC Falcon", regex: regexp.MustCompile(`\b(FalconKeyPairGenerator|FalconSigner|FalconParameters)\b`), algorithms: []string{"Falcon-512"}, languages: []string{".java", ".kt", ".kts"}},
+	{name: "PQC Java BC pqc import", regex: regexp.MustCompile(`import\s+org\.bouncycastle\.pqc\.(crypto|jcajce)\.(dilithium|kyber|sphincsplus|falcon|mlkem|mldsa|slhdsa)`), algorithms: []string{"ML-DSA-65"}, languages: []string{".java", ".kt", ".kts"}},
+	{name: "PQC Java JCA PQC providers", regex: regexp.MustCompile(`KeyPairGenerator\.getInstance\s*\(\s*"(Dilithium|ML-DSA|ML-KEM|SPHINCS\+|SLH-DSA|Falcon)"`), algorithms: []string{"ML-DSA-65"}, languages: []string{".java", ".kt", ".kts"}},
+
+	// ─── .NET / C# PQC ───
+	{name: "PQC C# BCrypt PQC", regex: regexp.MustCompile(`\b(MLDsa|MLKem|SlhDsa)(44|65|87|512|768|1024)?\b`), algorithms: []string{"ML-DSA-65"}, languages: []string{".cs"}},
+	{name: "PQC C# BouncyCastle PQC", regex: regexp.MustCompile(`Org\.BouncyCastle\.Pqc\.(Crypto|Asn1)\.(Dilithium|Kyber|SphincsPlus|Falcon)`), algorithms: []string{"ML-DSA-65"}, languages: []string{".cs"}},
+
+	// ─── Rust PQC Libraries (extends existing Rust section) ───
+	{name: "PQC Rust pqcrypto crate", regex: regexp.MustCompile(`pqcrypto_(dilithium|kyber|sphincsplus|falcon)::`), algorithms: []string{"ML-DSA-65"}, languages: []string{".rs"}},
+	{name: "PQC Rust oqs crate", regex: regexp.MustCompile(`oqs::(Sig|Kem)\b`), algorithms: []string{"ML-DSA-65"}, languages: []string{".rs"}},
+
+	// ─── C++ PQC Libraries ───
+	// Botan PQC (extends existing Botan section)
+	{name: "PQC C++ Botan ML-DSA", regex: regexp.MustCompile(`Botan::(Dilithium|ML_DSA)_(Private|Public)Key\b`), algorithms: []string{"ML-DSA-65"}, languages: []string{".cpp", ".h", ".hpp"}},
+	{name: "PQC C++ Botan ML-KEM", regex: regexp.MustCompile(`Botan::(Kyber|ML_KEM)_(Private|Public)Key\b`), algorithms: []string{"ML-KEM-768"}, languages: []string{".cpp", ".h", ".hpp"}},
+	{name: "PQC C++ Botan SLH-DSA", regex: regexp.MustCompile(`Botan::(SphincsPlus|SLH_DSA)_(Private|Public)Key\b`), algorithms: []string{"SLH-DSA"}, languages: []string{".cpp", ".h", ".hpp"}},
+
+	// ─── Generic / Cross-Language PQC Detection ───
+	// FIPS 203/204/205 standard names (any language)
+	{name: "PQC ML-DSA reference", regex: regexp.MustCompile(`\b(ML.DSA.(44|65|87))\b`), algorithms: []string{"ML-DSA-65"}, languages: []string{".c", ".cpp", ".h", ".hpp", ".go", ".py", ".java", ".kt", ".rs", ".cs", ".js", ".ts"}},
+	{name: "PQC ML-KEM reference", regex: regexp.MustCompile(`\b(ML.KEM.(512|768|1024))\b`), algorithms: []string{"ML-KEM-768"}, languages: []string{".c", ".cpp", ".h", ".hpp", ".go", ".py", ".java", ".kt", ".rs", ".cs", ".js", ".ts"}},
+	{name: "PQC SLH-DSA reference", regex: regexp.MustCompile(`\bSLH.DSA.(SHA2|SHAKE).(128|192|256)(s|f)\b`), algorithms: []string{"SLH-DSA"}, languages: []string{".c", ".cpp", ".h", ".hpp", ".go", ".py", ".java", ".kt", ".rs", ".cs", ".js", ".ts"}},
+	// Algorithm name mentions (comments, constants, config)
+	{name: "PQC Dilithium mention", regex: regexp.MustCompile(`\b[Dd]ilithium[_-]?(2|3|5|44|65|87|ref|avx2)?\b`), algorithms: []string{"ML-DSA-65"}, languages: []string{".c", ".cpp", ".h", ".hpp", ".go", ".py", ".java", ".kt", ".rs", ".cs", ".js", ".ts", ".yml", ".yaml", ".conf", ".cfg"}},
+	{name: "PQC Kyber mention", regex: regexp.MustCompile(`\b[Kk]yber[_-]?(512|768|1024|ref|avx2)?\b`), algorithms: []string{"ML-KEM-768"}, languages: []string{".c", ".cpp", ".h", ".hpp", ".go", ".py", ".java", ".kt", ".rs", ".cs", ".js", ".ts", ".yml", ".yaml", ".conf", ".cfg"}},
+	// Lattice-based crypto primitives common to Dilithium/Kyber
+	{name: "PQC lattice NTT operations", regex: regexp.MustCompile(`\b(ntt|invntt_tomont|ntt_init|basemul|poly_ntt|poly_invntt)\s*\(`), algorithms: []string{"ML-DSA-65"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC lattice polynomial ops", regex: regexp.MustCompile(`\b(poly_uniform|poly_challenge|poly_decompose|poly_make_hint|poly_use_hint|polyeta_pack|polyeta_unpack)\s*\(`), algorithms: []string{"ML-DSA-65"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "PQC SHAKE/Keccak for PQC", regex: regexp.MustCompile(`\b(shake128|shake256|keccak_absorb|keccak_squeeze|SHAKE128|SHAKE256)\s*\(`), algorithms: []string{"SHAKE"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
 }
 
 // File extensions to scan.

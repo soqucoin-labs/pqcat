@@ -74,6 +74,8 @@ func isGreen(alg string) bool {
 		"SLH-DSA-128S", "SLH-DSA-128F", "SLH-DSA-192S", "SLH-DSA-192F",
 		"SLH-DSA-256S", "SLH-DSA-256F",
 		"SPHINCS+", // Legacy name
+		// Falcon — NIST PQC alternate standard
+		"FALCON-512", "FALCON-1024", "FALCON",
 		// SP 800-208 — Stateful Hash-Based Signatures
 		"LMS", "XMSS", "HSS",
 	}
@@ -125,6 +127,7 @@ func isSymmetricSafe(alg string) bool {
 		"SIPHASH", "MUHASH",
 		// Hash functions — quantum resistant (standalone)
 		"SHA-256", "SHA-384", "SHA-512", "SHA3",
+		"SHAKE",
 		"HMAC",
 		// Password hashing / KDFs — symmetric, quantum resistant
 		"BCRYPT", "ARGON2", "SCRYPT", "PBKDF2",
