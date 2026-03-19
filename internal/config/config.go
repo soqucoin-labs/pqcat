@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 
 	"gopkg.in/yaml.v3"
@@ -324,8 +325,24 @@ func applyEnvOverrides(cfg *Config) {
 }
 
 // GenerateTemplate writes a well-documented example config file.
+// Detects the OS and uses platform-appropriate default paths.
 func GenerateTemplate(path string) error {
-	template := `# PQCAT Configuration
+	dataDir := "/var/lib/pqcat"
+	intelPath := "/etc/pqcat/pqcat-intel.json"
+
+	// Use ~/.pqcat on non-Linux platforms (macOS, Windows)
+	if home, err := os.UserHomeDir(); err == nil {
+		switch runtime.GOOS {
+		case "linux":
+			// Linux: keep /var/lib/pqcat for system-wide deployments
+		default:
+			// macOS, Windows, etc.: use home directory
+			dataDir = filepath.Join(home, ".pqcat")
+			intelPath = filepath.Join(home, ".pqcat", "pqcat-intel.json")
+		}
+	}
+
+	template := fmt.Sprintf(`# PQCAT Configuration
 # Soqucoin Labs Inc. — Post-Quantum Compliance Assessment Tool
 #
 # Precedence: CLI flags > env vars > ./pqcat.yaml > ~/.pqcat/config.yaml > /etc/pqcat/pqcat.yaml
@@ -341,8 +358,8 @@ criticality: STANDARD      # STANDARD, HVA, NSS
 workers: 20                # Concurrent scan workers
 
 # Output defaults
-output_dir: "/var/lib/pqcat/reports"
-baseline_dir: "/var/lib/pqcat/baselines"
+output_dir: "%s/reports"
+baseline_dir: "%s/baselines"
 report_format: json        # json, pdf, html
 
 # SIEM integration
@@ -353,7 +370,7 @@ siem:
 
 # Threat intelligence
 intel:
-  sidecar: "/etc/pqcat/pqcat-intel.json"
+  sidecar: "%s"
   # feed_url: "https://intel.pqcat.io/v1/latest"  # Pro edition only
   # auto_update: false
 
@@ -367,7 +384,7 @@ scan_policy:
 
 # Scan history database
 database:
-  path: "/var/lib/pqcat/pqcat.db"
+  path: "%s/pqcat.db"
 
 # REST API server (Pro edition only)
 # server:
@@ -375,6 +392,6 @@ database:
 #   tls: true
 #   cert_file: "/etc/pqcat/tls/cert.pem"
 #   key_file: "/etc/pqcat/tls/key.pem"
-`
+`, dataDir, dataDir, intelPath, dataDir)
 	return os.WriteFile(path, []byte(template), 0644)
 }
