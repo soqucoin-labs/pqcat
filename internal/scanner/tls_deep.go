@@ -1,0 +1,1221 @@
+// tls_deep.go implements comprehensive TLS/SSL scanning with full cipher suite
+// enumeration, protocol version probing, and certificate enrichment.
+//
+// Design rationale: Security engineers (e.g., John's feedback) expect a TLS
+// assessment tool to report AT LEAST what Qualys SSL Labs shows. PQCAT's
+// differentiator is adding quantum-risk classification on every component.
+// This file makes PQCAT a superset of SSL Labs: everything they show, plus
+// RED/YELLOW/GREEN quantum zones on each algorithm.
+//
+// Architecture:
+//   - Uses Go's crypto/tls for TLS 1.0-1.3 cipher/protocol probing
+//   - Uses raw TCP ClientHello for SSLv3/SSLv2 detection (no Go TLS for these)
+//   - Worker pool for concurrent cipher probing (default 8 workers)
+//   - Certificate enrichment extracted from a single successful connection
+//
+// Security note: This module connects to remote hosts and probes their TLS
+// configuration. In Enclave (air-gap) mode, the HTTP header check is skipped
+// but all TLS probing works since it's direct TCP.
+package scanner
+
+import (
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/hex"
+	"fmt"
+	"net"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/soqucoin-labs/pqcat/internal/classifier"
+	"github.com/soqucoin-labs/pqcat/internal/models"
+)
+
+// DeepTLSScanOptions configures deep scanning behavior.
+type DeepTLSScanOptions struct {
+	Timeout      time.Duration
+	Port         string
+	ProbeWorkers int  // Concurrent cipher suite probes (default 8)
+	SkipHTTP     bool // Skip HTTP header checks (for Enclave/air-gap)
+	SkipLegacy   bool // Skip SSLv2/SSLv3 probing
+}
+
+// DefaultDeepTLSOptions returns production defaults for deep scanning.
+func DefaultDeepTLSOptions() DeepTLSScanOptions {
+	return DeepTLSScanOptions{
+		Timeout:      10 * time.Second,
+		Port:         "443",
+		ProbeWorkers: 8,
+		SkipHTTP:     false,
+		SkipLegacy:   false,
+	}
+}
+
+// ScanTLSDeep performs a comprehensive TLS assessment of the target.
+// It enumerates all supported cipher suites and protocol versions,
+// enriches certificate details, checks HTTP headers, and classifies
+// every component for quantum vulnerability.
+func ScanTLSDeep(target string, opts DeepTLSScanOptions) (*DeepTLSResult, *models.ScanResult, error) {
+	start := time.Now()
+
+	host, port := parseTarget(target, opts.Port)
+	addr := net.JoinHostPort(host, port)
+
+	result := &DeepTLSResult{
+		Target:    addr,
+		Port:      port,
+		ScanMode:  "deep",
+		Protocols: make(map[string]*ProtocolResult),
+	}
+
+	// ── Phase 1: Initial connection (default — usually ECDSA cert) ──
+	conn, state, err := connectTLS(host, port, opts.Timeout, nil, 0, 0)
+	if err != nil {
+		return nil, nil, fmt.Errorf("initial TLS connection failed: %w", err)
+	}
+	conn.Close()
+
+	// ── Phase 1b: RSA certificate chain (force RSA-only cipher suites) ──
+	// Many servers (Cloudflare, AWS) serve dual certs: ECDSA + RSA.
+	// Go's TLS client prefers ECDSA, so we miss the RSA chain without this.
+	rsaSuites := []uint16{
+		0xc02f, // TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+		0xc030, // TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+		0x009c, // TLS_RSA_WITH_AES_128_GCM_SHA256
+		0x009d, // TLS_RSA_WITH_AES_256_GCM_SHA384
+	}
+	var rsaState tls.ConnectionState
+	rsaConn, rsaSt, rsaErr := connectTLS(host, port, opts.Timeout, rsaSuites, tls.VersionTLS12, tls.VersionTLS12)
+	if rsaErr == nil && rsaConn != nil {
+		rsaState = rsaSt
+		rsaConn.Close()
+	}
+
+	// ── Phase 2: Protocol version probing ──
+	probeProtocols(host, port, opts, result)
+
+	// ── Phase 3: Legacy protocol detection (SSLv3, SSLv2) via raw TCP ──
+	if !opts.SkipLegacy {
+		probeSSLv3(host, port, opts.Timeout, result)
+		probeSSLv2(host, port, opts.Timeout, result)
+	}
+
+	// ── Phase 4: Cipher suite enumeration (TLS 1.2 only) ──
+	probeCipherSuites(host, port, opts, result)
+
+	// ── Phase 4b: TLS 1.3 cipher suites (hard-registered — Go can't probe individually) ──
+	registerTLS13Suites(result)
+
+	// ── Phase 4c: Go-dropped cipher suites (raw TCP probe) ──
+	// Go 1.22+ removed these 3 suites from crypto/tls. They still exist on
+	// many servers (Cloudflare, AWS). A compliance tool CANNOT silently omit
+	// suites that exist — that's a liability gap.
+	probeGoDroppedSuites(host, port, opts, result)
+
+	// ── Phase 5: Server cipher preference detection ──
+	result.ServerPreference = detectServerPreference(host, port, opts.Timeout)
+
+	// ── Phase 6: Certificate chain enrichment ──
+	// Enrich default (ECDSA) chain
+	enrichCertificateChain(state, result)
+	// Enrich RSA chain (dedup by fingerprint)
+	if rsaErr == nil {
+		enrichRSACertificateChain(rsaState, result)
+	}
+
+	// ── Phase 7: HTTP security headers ──
+	if !opts.SkipHTTP {
+		checkHTTPHeaders(host, port, opts.Timeout, result)
+	}
+
+	// ── Phase 7b: Export/NULL cipher probes (Blindspot 14) ──
+	// Probes for catastrophically weak cipher suites (export-grade, NULL,
+	// anonymous) that are CRITICAL compliance failures. Uses the same
+	// raw TCP probe infrastructure as Go-dropped suites.
+	result.ExportNullProbes = probeExportNullSuites(host, port, opts.Timeout)
+
+	// ── Phase 7c: TLS Compression / CRIME detection (Blindspot 5) ──
+	// If TLS-level compression is enabled, the CRIME attack can extract
+	// session cookies. SSL Labs checks this — we should too.
+	result.TLSCompression = probeTLSCompression(host, port, opts.Timeout)
+
+	// ── Phase 7d: OCSP staple signature analysis (Blindspot 3) ──
+	// First scanner in the world to classify OCSP staple signatures for
+	// quantum vulnerability. SSL Labs shows stapling status but NOT the
+	// signature algorithm's PQ risk.
+	if len(state.OCSPResponse) > 0 && len(state.PeerCertificates) > 1 {
+		result.OCSPAnalysis = analyzeOCSPStaple(state.OCSPResponse, state.PeerCertificates[1])
+	} else if len(state.OCSPResponse) > 0 {
+		result.OCSPAnalysis = analyzeOCSPStaple(state.OCSPResponse, nil)
+	} else {
+		result.OCSPAnalysis = analyzeOCSPStaple(nil, nil)
+	}
+
+	// ── Phase 7e: SCT signature analysis (Blindspot 4) ──
+	// UNPRECEDENTED: No scanner classifies Signed Certificate Timestamp
+	// signatures for quantum risk. The entire CT ecosystem relies on ECDSA
+	// signatures that are quantum-forgeable.
+	result.SCTAnalysis = analyzeSCTs(state.SignedCertificateTimestamps)
+
+	// ── Phase 7f: Certificate HNDL exposure windows (Blindspot 7) ──
+	// Calculate per-certificate HNDL risk. Uses 2033 (CNSA 2.0 enforcement
+	// year) as the default quantum timeline.
+	quantumYear := 2033 // CNSA 2.0 enforcement date
+	for _, cert := range state.PeerCertificates {
+		exposure := calculateCertHNDLExposure(cert, quantumYear)
+		result.CertHNDLExposures = append(result.CertHNDLExposures, exposure)
+	}
+
+	// ── Phase 7g: CAA record analysis (Blindspot 12) ──
+	// Check which Certificate Authorities can issue certs for this domain.
+	if !opts.SkipHTTP { // CAA requires DNS, skip in air-gap mode
+		result.CAARecords = checkCAARecords(host)
+	}
+
+	// ── Phase 8: Quantum summary and remediation ──
+	computeQuantumSummary(result)
+	generateRemediation(result)
+
+	// ── Phase 8b: CNSA 2.0 Compliance Gap (CROSS-2) ──
+	// Calculate the gap between current PQ posture and CNSA 2.0 requirements.
+	if result.QuantumSummary.TotalAlgorithms > 0 {
+		pqCompliant := 0
+		if counts, ok := result.QuantumSummary.ZoneCounts[models.ZoneGreen]; ok {
+			pqCompliant = counts
+		}
+		result.CNSA2Gap = calculateCNSA2Gap(
+			result.QuantumSummary.TotalAlgorithms,
+			pqCompliant,
+			quantumYear,
+		)
+	}
+
+	// ── Phase 9: Key Exchange Group Enumeration (Blindspot 2 + 1) ──
+	// Probe which named groups/curves the server supports, including
+	// ML-KEM/X25519MLKEM768 hybrid PQ groups — THE crown jewel feature.
+	result.KeyExchangeGroups = probeKeyExchangeGroups(host, port, opts.Timeout)
+
+	// Propagate PQ key exchange detection to the top-level result
+	if result.KeyExchangeGroups.PQGroupFound {
+		result.PQKeyExchangeDetected = true
+		// Find the specific PQ group name
+		for _, g := range result.KeyExchangeGroups.Groups {
+			if g.Supported && g.Zone == models.ZoneGreen {
+				result.PQKeyExchangeGroup = g.Name
+				break
+			}
+		}
+	}
+
+	// Backup: Try Go's TLS library for PQ detection (works with Go 1.24+)
+	if !result.PQKeyExchangeDetected {
+		if pqDetected, pqGroup := detectPQKeyExchangeViaGoTLS(host, port, opts.Timeout); pqDetected {
+			result.PQKeyExchangeDetected = true
+			result.PQKeyExchangeGroup = pqGroup
+		}
+	}
+
+	// ── Phase 10: Secure Renegotiation (Blindspot 6) ──
+	// Check RFC 5746 renegotiation_info extension / SCSV support.
+	result.SecureRenegotiation = checkSecureRenegotiation(host, port, opts.Timeout)
+
+	result.Duration = time.Since(start)
+
+	// Convert to standard ScanResult for pipeline compatibility
+	scanResult := deepResultToScanResult(result)
+
+	return result, scanResult, nil
+}
+
+// EstimateDeepScan does a quick TCP port scan to estimate how long a deep scan would take.
+func EstimateDeepScan(targets []string, port string, timeout time.Duration, workers int) *DeepScanEstimate {
+	reachable := 0
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, workers)
+
+	for _, target := range targets {
+		wg.Add(1)
+		go func(t string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			host, p := parseTarget(t, port)
+			addr := net.JoinHostPort(host, p)
+			conn, err := net.DialTimeout("tcp", addr, timeout)
+			if err == nil {
+				conn.Close()
+				mu.Lock()
+				reachable++
+				mu.Unlock()
+			}
+		}(target)
+	}
+	wg.Wait()
+
+	// Deep scan takes ~20s per target with 8 probe workers.
+	// With N concurrent scan workers, total = (reachable / N) * 20s
+	perTarget := 20 * time.Second
+	totalParallel := time.Duration(reachable/workers+1) * perTarget
+
+	return &DeepScanEstimate{
+		TotalTargets:      len(targets),
+		ReachableTargets:  reachable,
+		EstimatedDuration: totalParallel,
+		EstimatedHuman:    humanDuration(totalParallel),
+		Workers:           workers,
+	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Protocol probing
+// ──────────────────────────────────────────────────────────────────────────────
+
+// probeProtocols tests TLS 1.0, 1.1, 1.2, 1.3 support.
+func probeProtocols(host, port string, opts DeepTLSScanOptions, result *DeepTLSResult) {
+	type versionProbe struct {
+		name    string
+		version uint16
+		zone    models.Zone
+		reason  string
+	}
+
+	probes := []versionProbe{
+		{"tls_1_0", tls.VersionTLS10, models.ZoneRed,
+			"Deprecated by RFC 8996 — prohibited by NIST SP 800-52 Rev. 2"},
+		{"tls_1_1", tls.VersionTLS11, models.ZoneRed,
+			"Deprecated by RFC 8996 — prohibited by NIST SP 800-52 Rev. 2"},
+		{"tls_1_2", tls.VersionTLS12, models.ZoneYellow,
+			"No post-quantum key exchange available in TLS 1.2"},
+		{"tls_1_3", tls.VersionTLS13, models.ZoneYellow,
+			"Supports PQ hybrid kex (ML-KEM) via draft-ietf-tls-ml-kem — zone GREEN when PQ kex negotiated"},
+	}
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	for _, p := range probes {
+		wg.Add(1)
+		go func(probe versionProbe) {
+			defer wg.Done()
+			conn, _, err := connectTLS(host, port, opts.Timeout, nil, probe.version, probe.version)
+			supported := err == nil
+			if conn != nil {
+				conn.Close()
+			}
+
+			mu.Lock()
+			result.Protocols[probe.name] = &ProtocolResult{
+				Supported: supported,
+				Zone:      probe.zone,
+				Reason:    probe.reason,
+			}
+			if !supported {
+				result.Protocols[probe.name].Reason = "Not supported (good)"
+				if probe.zone == models.ZoneRed {
+					result.Protocols[probe.name].Zone = models.ZoneGreen
+					result.Protocols[probe.name].Reason = "Deprecated protocol correctly disabled"
+				}
+			}
+			mu.Unlock()
+		}(p)
+	}
+	wg.Wait()
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Cipher suite enumeration
+// ──────────────────────────────────────────────────────────────────────────────
+
+// probeCipherSuites tests every known TLS 1.2 cipher suite against the server.
+// TLS 1.3 suites are handled separately by registerTLS13Suites() because
+// Go's tls.Config.CipherSuites field has NO effect on TLS 1.3 negotiation.
+func probeCipherSuites(host, port string, opts DeepTLSScanOptions, result *DeepTLSResult) {
+	// Gather all cipher suites Go knows about
+	allSuites := allCipherSuiteIDs()
+
+	type probeResult struct {
+		suiteID uint16
+		name    string
+		version uint16
+	}
+
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, opts.ProbeWorkers)
+	var accepted []probeResult
+	seen := make(map[uint16]bool) // Bug fix: dedup by suite ID
+
+	for _, suite := range allSuites {
+		// Skip TLS 1.3 suites — Go ignores CipherSuites for TLS 1.3.
+		// They are hard-registered via registerTLS13Suites() instead.
+		if suite.tls13 {
+			continue
+		}
+
+		wg.Add(1)
+		go func(s cipherSuiteInfo) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			conn, state, err := connectTLS(host, port, opts.Timeout, []uint16{s.id}, tls.VersionTLS12, tls.VersionTLS12)
+			if err == nil && conn != nil {
+				conn.Close()
+				// Bug fix: verify server negotiated the suite we offered,
+				// not a different one. With a single-suite offer this should
+				// always match, but defense-in-depth.
+				if state.CipherSuite != s.id {
+					return
+				}
+				mu.Lock()
+				if !seen[state.CipherSuite] {
+					seen[state.CipherSuite] = true
+					accepted = append(accepted, probeResult{
+						suiteID: state.CipherSuite,
+						name:    tls.CipherSuiteName(state.CipherSuite),
+						version: state.Version,
+					})
+				}
+				mu.Unlock()
+			}
+		}(suite)
+	}
+	wg.Wait()
+
+	// Build classified results
+	for _, a := range accepted {
+		csr := classifyCipherSuite(a.suiteID, a.name, a.version)
+		result.CipherSuites = append(result.CipherSuites, csr)
+	}
+}
+
+// registerTLS13Suites adds the 3 standard TLS 1.3 cipher suites if TLS 1.3 is
+// supported. Go hardcodes all 3 as always-available when TLS 1.3 is negotiated
+// (see crypto/tls/cipher_suites.go), so if we confirmed TLS 1.3 works in the
+// protocol probe phase, all 3 suites are supported.
+func registerTLS13Suites(result *DeepTLSResult) {
+	// Check if TLS 1.3 is supported from protocol probe results
+	p, ok := result.Protocols["tls_1_3"]
+	if !ok || !p.Supported {
+		return
+	}
+
+	tls13Suites := []struct {
+		id   uint16
+		name string
+	}{
+		{0x1301, "TLS_AES_128_GCM_SHA256"},
+		{0x1302, "TLS_AES_256_GCM_SHA384"},
+		{0x1303, "TLS_CHACHA20_POLY1305_SHA256"},
+	}
+
+	for _, s := range tls13Suites {
+		csr := classifyCipherSuite(s.id, s.name, tls.VersionTLS13)
+		result.CipherSuites = append(result.CipherSuites, csr)
+	}
+}
+
+// detectServerPreference checks if the server enforces its own cipher order.
+func detectServerPreference(host, port string, timeout time.Duration) bool {
+	// Connect with default (Go-preferred) order
+	conn1, state1, err1 := connectTLS(host, port, timeout, nil, 0, 0)
+	if err1 != nil {
+		return false
+	}
+	suite1 := state1.CipherSuite
+	conn1.Close()
+
+	// Connect with reversed order: put the weakest suites first
+	reversed := reversedCipherSuiteIDs()
+	conn2, state2, err2 := connectTLS(host, port, timeout, reversed, 0, 0)
+	if err2 != nil {
+		return false
+	}
+	suite2 := state2.CipherSuite
+	conn2.Close()
+
+	// If the server chose the same suite regardless of client order,
+	// it enforces server preference (good practice).
+	return suite1 == suite2
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Certificate enrichment
+// ──────────────────────────────────────────────────────────────────────────────
+
+// enrichCertificateChain extracts detailed information from the certificate chain.
+func enrichCertificateChain(state tls.ConnectionState, result *DeepTLSResult) {
+	for i, cert := range state.PeerCertificates {
+		detail := buildCertDetail(i, cert, state)
+		result.CertificateChain = append(result.CertificateChain, detail)
+	}
+}
+
+// enrichRSACertificateChain adds the RSA certificate chain if it differs from
+// the already-enriched ECDSA chain. Many servers (Cloudflare, AWS ALB) serve
+// dual certificates. Deduplicates by SHA-256 fingerprint.
+func enrichRSACertificateChain(state tls.ConnectionState, result *DeepTLSResult) {
+	// Build a set of fingerprints we already have
+	existing := make(map[string]bool)
+	for _, c := range result.CertificateChain {
+		existing[c.FingerprintSHA256] = true
+	}
+
+	for i, cert := range state.PeerCertificates {
+		hash := sha256.Sum256(cert.Raw)
+		fp := formatFingerprint(hash[:])
+		if existing[fp] {
+			continue // Already have this cert from the ECDSA chain
+		}
+		detail := buildCertDetail(len(result.CertificateChain)+i, cert, state)
+		result.CertificateChain = append(result.CertificateChain, detail)
+	}
+}
+
+// buildCertDetail extracts all fields for a single certificate.
+func buildCertDetail(depth int, cert *x509.Certificate, state tls.ConnectionState) CertificateDetail {
+	detail := CertificateDetail{
+		Depth:     depth,
+		Version:   cert.Version,
+		Subject:   cert.Subject.String(),
+		SubjectCN: cert.Subject.CommonName,
+		Issuer:    cert.Issuer.String(),
+		IssuerCN:  cert.Issuer.CommonName,
+		IssuerOrg: certIssuerOrg(cert),
+		Serial:    cert.SerialNumber.String(),
+		SANs:      cert.DNSNames,
+		NotBefore: cert.NotBefore,
+		NotAfter:  cert.NotAfter,
+		IsCA:      cert.IsCA,
+		IsSelfSigned: cert.Subject.CommonName == cert.Issuer.CommonName &&
+			cert.AuthorityKeyId != nil &&
+			cert.SubjectKeyId != nil &&
+			string(cert.AuthorityKeyId) == string(cert.SubjectKeyId),
+	}
+
+	// Days remaining
+	detail.DaysRemaining = int(time.Until(cert.NotAfter).Hours() / 24)
+	detail.IsExpired = time.Now().After(cert.NotAfter)
+
+	// SHA-256 fingerprint
+	hash := sha256.Sum256(cert.Raw)
+	detail.FingerprintSHA256 = formatFingerprint(hash[:])
+
+	// Signature classification
+	sigAlgo := cert.SignatureAlgorithm.String()
+	detail.SignatureAlgorithm = sigAlgo
+	detail.SignatureZone, detail.SignatureReason = classifier.ClassifyWithReason(sigAlgo)
+
+	// Public key classification
+	pubKeyAlgo := describePublicKey(cert)
+	detail.PublicKeyAlgorithm = pubKeyAlgo
+	detail.PublicKeyZone, detail.PublicKeyReason = classifier.ClassifyWithReason(pubKeyAlgo)
+	detail.KeySize = publicKeyBits(cert)
+
+	// SCT (check for OID 1.3.6.1.4.1.11129.2.4.2)
+	detail.SCTPresent = false
+	for _, ext := range cert.Extensions {
+		if ext.Id.String() == "1.3.6.1.4.1.11129.2.4.2" {
+			detail.SCTPresent = true
+			break
+		}
+	}
+
+	// OCSP
+	if len(cert.OCSPServer) > 0 {
+		detail.OCSPResponderURL = cert.OCSPServer[0]
+	}
+	detail.OCSPStapled = len(state.OCSPResponse) > 0
+
+	// CRL Distribution Points
+	detail.CRLDistributionURLs = cert.CRLDistributionPoints
+
+	// Key Usage
+	detail.KeyUsage = describeKeyUsage(cert.KeyUsage)
+	detail.ExtKeyUsage = describeExtKeyUsage(cert.ExtKeyUsage)
+
+	// IP SANs
+	for _, ip := range cert.IPAddresses {
+		detail.SANs = append(detail.SANs, ip.String())
+	}
+
+	return detail
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// HTTP security headers
+// ──────────────────────────────────────────────────────────────────────────────
+
+// checkHTTPHeaders performs a single HTTPS HEAD request to extract security headers.
+func checkHTTPHeaders(host, port string, timeout time.Duration, result *DeepTLSResult) {
+	client := &http.Client{
+		Timeout: timeout,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse // Don't follow redirects
+		},
+	}
+
+	url := fmt.Sprintf("https://%s:%s/", host, port)
+	resp, err := client.Head(url)
+	if err != nil {
+		return // HTTP header check is best-effort
+	}
+	defer resp.Body.Close()
+
+	httpResult := &HTTPSecurityResult{
+		ServerHeader:  resp.Header.Get("Server"),
+		XFrameOptions: resp.Header.Get("X-Frame-Options"),
+		XContentType:  resp.Header.Get("X-Content-Type-Options"),
+		CSP:           resp.Header.Get("Content-Security-Policy"),
+	}
+
+	result.ServerHeader = resp.Header.Get("Server")
+
+	// Parse HSTS
+	hsts := resp.Header.Get("Strict-Transport-Security")
+	if hsts != "" {
+		httpResult.HSTS = parseHSTS(hsts)
+	}
+
+	result.HTTPSecurity = httpResult
+}
+
+// parseHSTS parses the Strict-Transport-Security header value.
+func parseHSTS(value string) *HSTSResult {
+	h := &HSTSResult{Enabled: true}
+	parts := strings.Split(strings.ToLower(value), ";")
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if strings.HasPrefix(p, "max-age=") {
+			fmt.Sscanf(p, "max-age=%d", &h.MaxAge)
+		}
+		if p == "includesubdomains" {
+			h.IncludeSubdomains = true
+		}
+		if p == "preload" {
+			h.Preload = true
+		}
+	}
+	return h
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Quantum summary and remediation
+// ──────────────────────────────────────────────────────────────────────────────
+
+// computeQuantumSummary aggregates zone counts across all discovered components.
+func computeQuantumSummary(result *DeepTLSResult) {
+	zones := map[models.Zone]int{
+		models.ZoneRed:    0,
+		models.ZoneYellow: 0,
+		models.ZoneGreen:  0,
+	}
+	total := 0
+	protocolsVuln := 0
+	ciphersVuln := 0
+	certsVuln := 0
+
+	// Count protocol zones
+	for _, p := range result.Protocols {
+		if p.Supported {
+			zones[p.Zone]++
+			total++
+			if p.Zone == models.ZoneRed {
+				protocolsVuln++
+			}
+		}
+	}
+
+	// Count cipher suite zones
+	for _, cs := range result.CipherSuites {
+		zones[cs.OverallZone]++
+		total++
+		if cs.OverallZone == models.ZoneRed {
+			ciphersVuln++
+		}
+	}
+
+	// Count certificate zones
+	for _, cert := range result.CertificateChain {
+		zones[cert.SignatureZone]++
+		zones[cert.PublicKeyZone]++
+		total += 2
+		if cert.SignatureZone == models.ZoneRed {
+			certsVuln++
+		}
+		if cert.PublicKeyZone == models.ZoneRed {
+			certsVuln++
+		}
+	}
+
+	// Determine overall zone (worst case)
+	overall := models.ZoneGreen
+	if zones[models.ZoneYellow] > 0 {
+		overall = models.ZoneYellow
+	}
+	if zones[models.ZoneRed] > 0 {
+		overall = models.ZoneRed
+	}
+
+	// Critical finding
+	criticalFinding := "All cryptographic components are quantum-safe"
+	if zones[models.ZoneRed] > 0 {
+		criticalFinding = fmt.Sprintf("%d algorithm(s) vulnerable to quantum attack (Shor's algorithm)", zones[models.ZoneRed])
+	}
+
+	// HNDL exposure assessment
+	hndlExposure := "No quantum exposure — all key exchanges use PQ-safe algorithms"
+	if ciphersVuln > 0 {
+		hndlExposure = "CRITICAL: All TLS sessions using classical key exchange are recordable for future quantum decryption (Harvest Now, Decrypt Later)"
+	}
+
+	result.QuantumSummary = QuantumSummary{
+		OverallZone:      overall,
+		TotalAlgorithms:  total,
+		ZoneCounts:       zones,
+		CriticalFinding:  criticalFinding,
+		HNDLExposure:     hndlExposure,
+		ProtocolsVuln:    protocolsVuln,
+		CipherSuitesVuln: ciphersVuln,
+		CertsVuln:        certsVuln,
+	}
+}
+
+// generateRemediation creates prioritized, actionable fix recommendations.
+func generateRemediation(result *DeepTLSResult) {
+	var actions []RemediationAction
+	priority := 1
+
+	// Check for deprecated protocols
+	for name, p := range result.Protocols {
+		if p.Supported && p.Zone == models.ZoneRed {
+			actions = append(actions, RemediationAction{
+				Priority:   priority,
+				Action:     fmt.Sprintf("Disable %s — deprecated and insecure", strings.ReplaceAll(strings.ToUpper(name), "_", " ")),
+				Impact:     "Eliminates downgrade attacks and protocol-level vulnerabilities",
+				Complexity: "LOW",
+				Urgency:    "IMMEDIATE",
+				Reference:  "RFC 8996, NIST SP 800-52 Rev. 2",
+				Zone:       models.ZoneRed,
+			})
+			priority++
+		}
+	}
+
+	// Check for quantum-vulnerable key exchanges
+	kexVuln := 0
+	for _, cs := range result.CipherSuites {
+		if cs.KeyExchangeZone == models.ZoneRed {
+			kexVuln++
+		}
+	}
+	if kexVuln > 0 {
+		actions = append(actions, RemediationAction{
+			Priority:   priority,
+			Action:     "Enable ML-KEM hybrid key exchange (X25519+ML-KEM-768 for TLS 1.3)",
+			Impact:     "Protects all new TLS sessions against quantum HNDL attacks",
+			Complexity: "LOW",
+			Urgency:    "IMMEDIATE",
+			Reference:  "CNSA 2.0 §3.1, RFC 9180, draft-ietf-tls-ml-kem",
+			Zone:       models.ZoneRed,
+			AssetCount: kexVuln,
+		})
+		priority++
+	}
+
+	// Check for quantum-vulnerable certificate signatures
+	certVuln := 0
+	for _, cert := range result.CertificateChain {
+		if cert.SignatureZone == models.ZoneRed || cert.PublicKeyZone == models.ZoneRed {
+			certVuln++
+		}
+	}
+	if certVuln > 0 {
+		actions = append(actions, RemediationAction{
+			Priority:   priority,
+			Action:     "Migrate certificates to ML-DSA-65 (FIPS 204) or hybrid RSA+ML-DSA signatures",
+			Impact:     "Eliminates quantum forgery risk for server authentication",
+			Complexity: "MEDIUM",
+			Urgency:    "SHORT_TERM",
+			Reference:  "CNSA 2.0 §4.2 — required by 2030 for NSS, NIST SP 800-227",
+			Zone:       models.ZoneRed,
+			AssetCount: certVuln,
+		})
+		priority++
+	}
+
+	// Check for weak ciphers (non-AEAD)
+	weakCiphers := 0
+	for _, cs := range result.CipherSuites {
+		if strings.Contains(cs.BulkCipher, "CBC") {
+			weakCiphers++
+		}
+	}
+	if weakCiphers > 0 {
+		actions = append(actions, RemediationAction{
+			Priority:   priority,
+			Action:     fmt.Sprintf("Remove %d CBC-mode cipher suite(s) — prefer AEAD (GCM, ChaCha20-Poly1305)", weakCiphers),
+			Impact:     "Eliminates padding oracle attack surface (BEAST, Lucky13)",
+			Complexity: "LOW",
+			Urgency:    "SHORT_TERM",
+			Reference:  "NIST SP 800-52 Rev. 2 §3.3.1",
+			Zone:       models.ZoneYellow,
+			AssetCount: weakCiphers,
+		})
+		priority++
+	}
+
+	// HSTS recommendation
+	if result.HTTPSecurity != nil && (result.HTTPSecurity.HSTS == nil || !result.HTTPSecurity.HSTS.Enabled) {
+		actions = append(actions, RemediationAction{
+			Priority:   priority,
+			Action:     "Enable HTTP Strict Transport Security (HSTS) with includeSubDomains and preload",
+			Impact:     "Prevents SSL stripping attacks and enforces HTTPS-only access",
+			Complexity: "LOW",
+			Urgency:    "SHORT_TERM",
+			Reference:  "RFC 6797, NIST SP 800-52 Rev. 2 §4.2",
+			Zone:       models.ZoneYellow,
+		})
+	}
+
+	result.Remediation = actions
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Cipher suite classification
+// ──────────────────────────────────────────────────────────────────────────────
+
+// classifyCipherSuite breaks down a cipher suite and classifies each component.
+func classifyCipherSuite(id uint16, name string, version uint16) CipherSuiteResult {
+	csr := CipherSuiteResult{
+		ID:       id,
+		IDHex:    fmt.Sprintf("0x%04X", id),
+		Name:     name,
+		Protocol: tlsVersionName(version),
+	}
+
+	// Parse components from cipher suite name
+	// TLS 1.3 suites: TLS_AES_256_GCM_SHA384  (no kex/auth — handled at protocol level)
+	// TLS 1.2 suites: TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+	if version >= tls.VersionTLS13 {
+		// TLS 1.3: key exchange is always ephemeral (X25519/P-256 via supported_groups)
+		csr.KeyExchange = "X25519/P-256 (TLS 1.3)"
+		csr.Authentication = "Certificate-based"
+		csr.ForwardSecrecy = true
+
+		switch {
+		case strings.Contains(name, "AES_256_GCM"):
+			csr.BulkCipher = "AES-256-GCM"
+			csr.KeySize = 256
+		case strings.Contains(name, "AES_128_GCM"):
+			csr.BulkCipher = "AES-128-GCM"
+			csr.KeySize = 128
+		case strings.Contains(name, "CHACHA20_POLY1305"):
+			csr.BulkCipher = "ChaCha20-Poly1305"
+			csr.KeySize = 256
+		default:
+			csr.BulkCipher = name
+			csr.KeySize = 0
+		}
+
+		if strings.Contains(name, "SHA384") {
+			csr.MAC = "SHA-384 (AEAD)"
+		} else {
+			csr.MAC = "SHA-256 (AEAD)"
+		}
+	} else {
+		// TLS 1.2 and below — parse from name
+		switch {
+		case strings.Contains(name, "ECDHE"):
+			csr.KeyExchange = "ECDHE"
+			csr.ForwardSecrecy = true
+		case strings.Contains(name, "DHE") && !strings.Contains(name, "ECDHE"):
+			csr.KeyExchange = "DHE"
+			csr.ForwardSecrecy = true
+		default:
+			csr.KeyExchange = "RSA (static)"
+			csr.ForwardSecrecy = false
+		}
+
+		switch {
+		case strings.Contains(name, "ECDSA"):
+			csr.Authentication = "ECDSA"
+		case strings.Contains(name, "RSA"):
+			csr.Authentication = "RSA"
+		default:
+			csr.Authentication = "unknown"
+		}
+
+		switch {
+		case strings.Contains(name, "AES_256_GCM"):
+			csr.BulkCipher = "AES-256-GCM"
+			csr.KeySize = 256
+		case strings.Contains(name, "AES_128_GCM"):
+			csr.BulkCipher = "AES-128-GCM"
+			csr.KeySize = 128
+		case strings.Contains(name, "AES_256_CBC"):
+			csr.BulkCipher = "AES-256-CBC"
+			csr.KeySize = 256
+		case strings.Contains(name, "AES_128_CBC"):
+			csr.BulkCipher = "AES-128-CBC"
+			csr.KeySize = 128
+		case strings.Contains(name, "CHACHA20_POLY1305"):
+			csr.BulkCipher = "ChaCha20-Poly1305"
+			csr.KeySize = 256
+		case strings.Contains(name, "3DES"):
+			csr.BulkCipher = "3DES-EDE-CBC"
+			csr.KeySize = 168
+		case strings.Contains(name, "RC4"):
+			csr.BulkCipher = "RC4"
+			csr.KeySize = 128
+		default:
+			csr.BulkCipher = "unknown"
+		}
+
+		// MAC
+		switch {
+		case strings.Contains(name, "GCM"), strings.Contains(name, "POLY1305"):
+			csr.MAC = "" // AEAD — no separate MAC
+		case strings.Contains(name, "SHA384"):
+			csr.MAC = "SHA-384"
+		case strings.Contains(name, "SHA256"):
+			csr.MAC = "SHA-256"
+		case strings.Contains(name, "SHA"):
+			csr.MAC = "SHA-1"
+		}
+	}
+
+	// Classify each component for quantum vulnerability
+	csr.KeyExchangeZone = classifier.Classify(csr.KeyExchange)
+	csr.AuthZone = classifier.Classify(csr.Authentication)
+	csr.BulkCipherZone = classifier.Classify(csr.BulkCipher)
+	if csr.MAC != "" {
+		csr.MACZone = classifier.Classify(csr.MAC)
+	} else {
+		csr.MACZone = models.ZoneGreen
+	}
+
+	// Overall zone = worst component
+	csr.OverallZone = worstZone(csr.KeyExchangeZone, csr.AuthZone, csr.BulkCipherZone, csr.MACZone)
+
+	// Strength label
+	switch {
+	case strings.Contains(csr.BulkCipher, "RC4") || strings.Contains(csr.BulkCipher, "3DES"):
+		csr.Strength = "insecure"
+	case strings.Contains(csr.BulkCipher, "CBC"):
+		csr.Strength = "weak"
+	case !csr.ForwardSecrecy:
+		csr.Strength = "acceptable"
+	default:
+		csr.Strength = "strong"
+	}
+
+	// Reason
+	switch csr.OverallZone {
+	case models.ZoneRed:
+		csr.Reason = fmt.Sprintf("Key exchange (%s) broken by Shor's algorithm on a CRQC", csr.KeyExchange)
+		if strings.Contains(csr.BulkCipher, "RC4") {
+			csr.Reason = "RC4 is classically broken — prohibited by all standards"
+		}
+		if strings.Contains(csr.BulkCipher, "3DES") {
+			csr.Reason = "3DES has 64-bit block size — vulnerable to Sweet32 collision attack"
+		}
+	case models.ZoneYellow:
+		csr.Reason = "Transitional — some components have limited quantum resistance"
+	case models.ZoneGreen:
+		csr.Reason = "All components quantum-resistant"
+	}
+
+	return csr
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────────────────────────────────────────
+
+// connectTLS makes a TLS connection with optional cipher suite and version constraints.
+func connectTLS(host, port string, timeout time.Duration, suites []uint16, minVer, maxVer uint16) (*tls.Conn, tls.ConnectionState, error) {
+	cfg := &tls.Config{
+		InsecureSkipVerify: true,
+		ServerName:         host,
+	}
+
+	if len(suites) > 0 {
+		cfg.CipherSuites = suites
+	}
+	if minVer > 0 {
+		cfg.MinVersion = minVer
+	}
+	if maxVer > 0 {
+		cfg.MaxVersion = maxVer
+	}
+
+	addr := net.JoinHostPort(host, port)
+	conn, err := tls.DialWithDialer(
+		&net.Dialer{Timeout: timeout},
+		"tcp",
+		addr,
+		cfg,
+	)
+	if err != nil {
+		return nil, tls.ConnectionState{}, err
+	}
+
+	state := conn.ConnectionState()
+	return conn, state, nil
+}
+
+type cipherSuiteInfo struct {
+	id    uint16
+	name  string
+	tls13 bool
+}
+
+// allCipherSuiteIDs returns every cipher suite Go's TLS library knows about.
+func allCipherSuiteIDs() []cipherSuiteInfo {
+	var all []cipherSuiteInfo
+
+	// Secure suites
+	for _, s := range tls.CipherSuites() {
+		isTLS13 := false
+		for _, v := range s.SupportedVersions {
+			if v == tls.VersionTLS13 {
+				isTLS13 = true
+			}
+		}
+		all = append(all, cipherSuiteInfo{id: s.ID, name: s.Name, tls13: isTLS13})
+	}
+
+	// Insecure suites (RC4, 3DES, etc.) — critical for completeness
+	for _, s := range tls.InsecureCipherSuites() {
+		all = append(all, cipherSuiteInfo{id: s.ID, name: s.Name, tls13: false})
+	}
+
+	return all
+}
+
+// reversedCipherSuiteIDs returns cipher suites in weakest-first order.
+func reversedCipherSuiteIDs() []uint16 {
+	// Insecure first (to detect server preference)
+	var ids []uint16
+	for _, s := range tls.InsecureCipherSuites() {
+		ids = append(ids, s.ID)
+	}
+	for _, s := range tls.CipherSuites() {
+		ids = append(ids, s.ID)
+	}
+	return ids
+}
+
+// worstZone returns the most critical zone among the given zones.
+func worstZone(zones ...models.Zone) models.Zone {
+	worst := models.ZoneGreen
+	for _, z := range zones {
+		if z == models.ZoneRed {
+			return models.ZoneRed
+		}
+		if z == models.ZoneYellow {
+			worst = models.ZoneYellow
+		}
+	}
+	return worst
+}
+
+// formatFingerprint formats a hash as colon-separated hex (AB:CD:EF:...).
+func formatFingerprint(hash []byte) string {
+	hexStr := hex.EncodeToString(hash)
+	var parts []string
+	for i := 0; i < len(hexStr); i += 2 {
+		end := i + 2
+		if end > len(hexStr) {
+			end = len(hexStr)
+		}
+		parts = append(parts, strings.ToUpper(hexStr[i:end]))
+	}
+	return strings.Join(parts, ":")
+}
+
+// humanDuration formats a duration for human display.
+func humanDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("~%d seconds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("~%d minutes", int(d.Minutes()))
+	}
+	hours := int(d.Hours())
+	mins := int(d.Minutes()) % 60
+	if mins > 0 {
+		return fmt.Sprintf("~%dh %dm", hours, mins)
+	}
+	return fmt.Sprintf("~%d hours", hours)
+}
+
+// describeKeyUsage converts x509.KeyUsage bitmask to human-readable strings.
+func describeKeyUsage(ku x509.KeyUsage) []string {
+	var uses []string
+	if ku&x509.KeyUsageDigitalSignature != 0 {
+		uses = append(uses, "Digital Signature")
+	}
+	if ku&x509.KeyUsageKeyEncipherment != 0 {
+		uses = append(uses, "Key Encipherment")
+	}
+	if ku&x509.KeyUsageDataEncipherment != 0 {
+		uses = append(uses, "Data Encipherment")
+	}
+	if ku&x509.KeyUsageKeyAgreement != 0 {
+		uses = append(uses, "Key Agreement")
+	}
+	if ku&x509.KeyUsageCertSign != 0 {
+		uses = append(uses, "Certificate Sign")
+	}
+	if ku&x509.KeyUsageCRLSign != 0 {
+		uses = append(uses, "CRL Sign")
+	}
+	return uses
+}
+
+// describeExtKeyUsage converts x509.ExtKeyUsage to human-readable strings.
+func describeExtKeyUsage(eku []x509.ExtKeyUsage) []string {
+	var uses []string
+	for _, u := range eku {
+		switch u {
+		case x509.ExtKeyUsageServerAuth:
+			uses = append(uses, "Server Authentication")
+		case x509.ExtKeyUsageClientAuth:
+			uses = append(uses, "Client Authentication")
+		case x509.ExtKeyUsageCodeSigning:
+			uses = append(uses, "Code Signing")
+		case x509.ExtKeyUsageEmailProtection:
+			uses = append(uses, "Email Protection")
+		case x509.ExtKeyUsageOCSPSigning:
+			uses = append(uses, "OCSP Signing")
+		case x509.ExtKeyUsageTimeStamping:
+			uses = append(uses, "Time Stamping")
+		}
+	}
+	return uses
+}
+
+// deepResultToScanResult converts the deep scan result to a standard ScanResult
+// so the existing pipeline (scoring, PDF, CBOM, etc.) works unchanged.
+func deepResultToScanResult(deep *DeepTLSResult) *models.ScanResult {
+	result := &models.ScanResult{
+		Target:    deep.Target,
+		ScanType:  "tls",
+		Timestamp: time.Now(),
+		Duration:  deep.Duration,
+		Assets:    make([]models.CryptoAsset, 0),
+		Details: map[string]string{
+			"scan_mode":           "deep",
+			"protocols_supported": countSupportedProtocols(deep),
+			"cipher_suites_found": fmt.Sprintf("%d", len(deep.CipherSuites)),
+			"server_preference":   fmt.Sprintf("%v", deep.ServerPreference),
+		},
+	}
+
+	assetIdx := 0
+
+	// Convert cipher suites to CryptoAssets
+	for _, cs := range deep.CipherSuites {
+		// Key exchange asset
+		result.Assets = append(result.Assets, models.CryptoAsset{
+			ID:          fmt.Sprintf("%s:cipher:%d:kex", deep.Target, assetIdx),
+			Type:        models.AssetTLSCipher,
+			Algorithm:   cs.KeyExchange,
+			KeySize:     cs.KeySize,
+			Zone:        cs.KeyExchangeZone,
+			Location:    fmt.Sprintf("%s (cipher: %s)", deep.Target, cs.Name),
+			Criticality: models.CriticalityStandard,
+			Details: map[string]string{
+				"cipher_suite": cs.Name,
+				"cipher_id":    cs.IDHex,
+				"protocol":     cs.Protocol,
+				"component":    "key_exchange",
+				"strength":     cs.Strength,
+			},
+		})
+		assetIdx++
+
+		// Bulk cipher asset
+		result.Assets = append(result.Assets, models.CryptoAsset{
+			ID:          fmt.Sprintf("%s:cipher:%d:bulk", deep.Target, assetIdx),
+			Type:        models.AssetTLSCipher,
+			Algorithm:   cs.BulkCipher,
+			KeySize:     cs.KeySize,
+			Zone:        cs.BulkCipherZone,
+			Location:    fmt.Sprintf("%s (cipher: %s)", deep.Target, cs.Name),
+			Criticality: models.CriticalityStandard,
+			Details: map[string]string{
+				"cipher_suite": cs.Name,
+				"component":    "bulk_cipher",
+			},
+		})
+		assetIdx++
+	}
+
+	// Convert certificates to CryptoAssets
+	for _, cert := range deep.CertificateChain {
+		// Signature algorithm
+		result.Assets = append(result.Assets, models.CryptoAsset{
+			ID:        fmt.Sprintf("%s:cert:%d:sig", deep.Target, cert.Depth),
+			Type:      models.AssetTLSCert,
+			Algorithm: cert.SignatureAlgorithm,
+			KeySize:   cert.KeySize,
+			Zone:      cert.SignatureZone,
+			Location:  fmt.Sprintf("%s (cert %d: %s)", deep.Target, cert.Depth, cert.SubjectCN),
+			Details: map[string]string{
+				"subject":        cert.SubjectCN,
+				"issuer":         cert.IssuerCN,
+				"issuer_org":     cert.IssuerOrg,
+				"serial":         cert.Serial,
+				"not_before":     cert.NotBefore.Format(time.RFC3339),
+				"not_after":      cert.NotAfter.Format(time.RFC3339),
+				"chain_depth":    fmt.Sprintf("%d", cert.Depth),
+				"is_ca":          fmt.Sprintf("%v", cert.IsCA),
+				"component":      "signature",
+				"fingerprint":    cert.FingerprintSHA256,
+				"days_remaining": fmt.Sprintf("%d", cert.DaysRemaining),
+			},
+			Criticality: models.CriticalityStandard,
+		})
+
+		// Public key algorithm
+		result.Assets = append(result.Assets, models.CryptoAsset{
+			ID:        fmt.Sprintf("%s:cert:%d:pubkey", deep.Target, cert.Depth),
+			Type:      models.AssetTLSCert,
+			Algorithm: cert.PublicKeyAlgorithm,
+			KeySize:   cert.KeySize,
+			Zone:      cert.PublicKeyZone,
+			Location:  fmt.Sprintf("%s (cert %d: %s)", deep.Target, cert.Depth, cert.SubjectCN),
+			Details: map[string]string{
+				"subject":   cert.SubjectCN,
+				"component": "public_key",
+				"sans":      strings.Join(cert.SANs, ", "),
+			},
+			Criticality: models.CriticalityStandard,
+		})
+	}
+
+	return result
+}
+
+// countSupportedProtocols returns a comma-separated list of supported protocols.
+func countSupportedProtocols(deep *DeepTLSResult) string {
+	var supported []string
+	order := []string{"tls_1_3", "tls_1_2", "tls_1_1", "tls_1_0", "ssl_3_0", "ssl_2_0"}
+	for _, name := range order {
+		if p, ok := deep.Protocols[name]; ok && p.Supported {
+			supported = append(supported, strings.ReplaceAll(strings.ToUpper(name), "_", " "))
+		}
+	}
+	return strings.Join(supported, ", ")
+}

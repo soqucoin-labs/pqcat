@@ -89,6 +89,16 @@ func ScanSSH(target string, opts SSHScanOptions) (*models.ScanResult, error) {
 	}
 
 	result.Duration = time.Since(start)
+
+	// SSH-5: Enrich with banner capture (product, version, PQ readiness)
+	if len(result.Assets) > 0 {
+		// Grab the raw SSH banner from a TCP connection
+		banner := grabSSHBanner(addr, opts.Timeout)
+		if banner != "" {
+			result.Assets = EnrichSSHWithBanner(result.Assets, banner)
+		}
+	}
+
 	return result, nil
 }
 
@@ -142,4 +152,27 @@ func keyBitSize(key ssh.PublicKey) int {
 	default:
 		return 0
 	}
+}
+
+// grabSSHBanner connects via raw TCP and reads the SSH identification string.
+// The banner is the first line sent by the server (e.g. "SSH-2.0-OpenSSH_9.6").
+func grabSSHBanner(addr string, timeout time.Duration) string {
+	conn, err := net.DialTimeout("tcp", addr, timeout)
+	if err != nil {
+		return ""
+	}
+	defer conn.Close()
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+
+	buf := make([]byte, 256)
+	n, err := conn.Read(buf)
+	if err != nil || n == 0 {
+		return ""
+	}
+	banner := strings.TrimSpace(string(buf[:n]))
+	// SSH banners start with "SSH-"
+	if strings.HasPrefix(banner, "SSH-") {
+		return banner
+	}
+	return ""
 }

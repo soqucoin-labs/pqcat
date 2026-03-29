@@ -929,6 +929,14 @@ func ScanCode(target string) (*models.ScanResult, error) {
 
 	for i, file := range files {
 		findings := scanFileForCrypto(file)
+
+		// CODE-5: Secret scanning for config files (.env, .properties, etc.)
+		ext := strings.ToLower(filepath.Ext(file))
+		if ConfigSecretExtensions[ext] {
+			secrets := scanFileForSecrets(file)
+			findings = append(findings, secrets...)
+		}
+
 		if len(findings) > 0 {
 			filesWithCrypto++
 			totalFindings += len(findings)
@@ -939,6 +947,9 @@ func ScanCode(target string) (*models.ScanResult, error) {
 			progress.Update(i+1, filepath.Base(file))
 		}
 	}
+
+	// CODE-1 + CODE-3: Post-process enrichment (key sizes + cipher modes)
+	result.Assets = EnrichAssets(result.Assets)
 
 	progress.Done(fmt.Sprintf("Scanned %d files, %d findings in %d files",
 		len(files), totalFindings, filesWithCrypto))

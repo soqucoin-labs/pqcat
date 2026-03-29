@@ -45,6 +45,8 @@ const (
 	AssetTLSCipher  AssetType = "tls_cipher_suite"
 	AssetSSHHostKey AssetType = "ssh_host_key"
 	AssetSSHKEX     AssetType = "ssh_kex"
+	AssetSSHCipher  AssetType = "ssh_cipher"
+	AssetSSHMAC     AssetType = "ssh_mac"
 	AssetSBOMDep    AssetType = "sbom_dependency"
 	AssetPKICert    AssetType = "pki_certificate"
 	AssetCodeCrypto AssetType = "code_crypto_call"

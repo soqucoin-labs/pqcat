@@ -387,12 +387,13 @@ func ScanSBOM(path string, format SBOMFormat) (*models.ScanResult, error) {
 	}
 
 	var components []componentInfo
+	var cycloneDXDeps []cycloneDXDep
 
 	switch format {
 	case FormatCycloneDX:
-		components, err = parseCycloneDX(data)
+		components, cycloneDXDeps, err = parseCycloneDXFull(data)
 	case FormatSPDX:
-		components, err = parseSPDX(data)
+		components, err = parseSPDXFull(data)
 	default:
 		return nil, fmt.Errorf("unsupported SBOM format: %s", format)
 	}
@@ -408,8 +409,100 @@ func ScanSBOM(path string, format SBOMFormat) (*models.ScanResult, error) {
 		matchCryptoAssets(comp, result)
 	}
 
+	// SBOM-1/2/4: Post-processing enrichment (version vulns, transitive deps, PURL)
+	result.Assets = EnrichSBOMAssets(result.Assets, components, cycloneDXDeps)
+
+	// SBOM-3: Completeness scoring
+	quality := AssessSBOMQuality(components, len(result.Assets))
+	if quality.Grade != "" {
+		// Add quality metadata as a synthetic asset for reporting
+		warningStr := ""
+		if len(quality.Warnings) > 0 {
+			warningStr = strings.Join(quality.Warnings, "; ")
+		}
+		result.Assets = append(result.Assets, models.CryptoAsset{
+			ID:        "sbom:quality:assessment",
+			Type:      models.AssetSBOMDep,
+			Algorithm: "SBOM-QUALITY",
+			Zone:      qualityToZone(quality.Grade),
+			Location:  fmt.Sprintf("SBOM Quality: Grade %s (%.0f%%)", quality.Grade, quality.CompletenessScore*100),
+			Details: map[string]string{
+				"component_count":    fmt.Sprintf("%d", quality.ComponentCount),
+				"with_versions":      fmt.Sprintf("%d", quality.WithVersions),
+				"with_purls":         fmt.Sprintf("%d", quality.WithPURLs),
+				"crypto_libs_found":  fmt.Sprintf("%d", quality.CryptoLibsFound),
+				"completeness_score": fmt.Sprintf("%.2f", quality.CompletenessScore),
+				"grade":              quality.Grade,
+				"warnings":           warningStr,
+				"risk_type":          "sbom_quality",
+			},
+			Criticality: models.CriticalityStandard,
+		})
+	}
+
 	result.Duration = time.Since(start)
 	return result, nil
+}
+
+// qualityToZone maps SBOM quality grades to risk zones.
+func qualityToZone(grade string) models.Zone {
+	switch grade {
+	case "A":
+		return models.ZoneGreen
+	case "B":
+		return models.ZoneGreen
+	case "C":
+		return models.ZoneYellow
+	case "D":
+		return models.ZoneRed
+	default:
+		return models.ZoneRed
+	}
+}
+
+// parseCycloneDXFull parses CycloneDX JSON and returns components AND deps.
+func parseCycloneDXFull(data []byte) ([]componentInfo, []cycloneDXDep, error) {
+	var bom cycloneDXBOM
+	if err := json.Unmarshal(data, &bom); err != nil {
+		return nil, nil, fmt.Errorf("failed to parse CycloneDX: %w", err)
+	}
+
+	var components []componentInfo
+	for _, c := range bom.Components {
+		components = append(components, componentInfo{
+			name:    c.Name,
+			version: c.Version,
+			purl:    c.Purl,
+			group:   c.Group,
+		})
+	}
+	return components, bom.Dependencies, nil
+}
+
+// parseSPDXFull parses SPDX JSON and enriches components with download-derived ecosystem.
+func parseSPDXFull(data []byte) ([]componentInfo, error) {
+	var doc spdxDocument
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("failed to parse SPDX: %w", err)
+	}
+
+	var components []componentInfo
+	for _, p := range doc.Packages {
+		ci := componentInfo{
+			name:    p.Name,
+			version: p.VersionInfo,
+		}
+		// SBOM-4: Extract ecosystem from download location for SPDX
+		if p.DownloadLocation != "" {
+			eco := EcosystemFromDownloadLocation(p.DownloadLocation)
+			if eco != "" {
+				// Construct a synthetic PURL for ecosystem tagging
+				ci.purl = fmt.Sprintf("pkg:%s/%s@%s", eco, p.Name, p.VersionInfo)
+			}
+		}
+		components = append(components, ci)
+	}
+	return components, nil
 }
 
 // componentInfo is a normalized representation of an SBOM component.

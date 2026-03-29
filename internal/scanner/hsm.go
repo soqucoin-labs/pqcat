@@ -121,6 +121,9 @@ func ScanHSM(target string) (*models.ScanResult, error) {
 		"keystores":        fmt.Sprintf("%d", len(keystoreAssets)),
 	}
 
+	// HSM-3: Enrich with vendor-specific PQC readiness status
+	result.Assets = EnrichHSMWithPQCStatus(result.Assets)
+
 	return result, nil
 }
 

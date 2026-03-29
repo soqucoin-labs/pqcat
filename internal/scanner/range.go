@@ -152,7 +152,17 @@ func ScanRange(targets []string, opts RangeOptions) (*models.ScanResult, error) 
 }
 
 // expandTargets takes a list of targets and expands CIDR ranges into individual
-// host:port strings.
+// host:port strings. Supports IPv4, IPv6, and mixed inputs.
+//
+// Accepted formats:
+//   - IPv4 CIDR:    "10.0.0.0/24"
+//   - IPv6 CIDR:    "2001:db8::/120"
+//   - IPv4 host:    "10.0.0.1"
+//   - IPv6 host:    "2001:db8::1"
+//   - Hostname:     "soqu.org"
+//   - IPv4 w/port:  "10.0.0.1:8443"
+//   - IPv6 w/port:  "[2001:db8::1]:8443"
+//   - Host w/port:  "soqu.org:8443"
 func expandTargets(targets []string, defaultPort int) ([]string, error) {
 	var hosts []string
 
@@ -162,37 +172,72 @@ func expandTargets(targets []string, defaultPort int) ([]string, error) {
 			continue
 		}
 
-		// Check if it's a CIDR range
+		// Check if it's a CIDR range (both IPv4 and IPv6)
 		if strings.Contains(target, "/") {
-			ips, err := expandCIDR(target)
+			expanded, err := expandCIDR(target)
 			if err != nil {
 				return nil, fmt.Errorf("invalid CIDR %q: %w", target, err)
 			}
-			for _, ip := range ips {
-				hosts = append(hosts, fmt.Sprintf("%s:%d", ip, defaultPort))
+			for _, ip := range expanded {
+				hosts = append(hosts, formatHostPort(ip, defaultPort))
 			}
 			continue
 		}
 
-		// Check if it already has a port
-		if strings.Contains(target, ":") {
+		// Bracketed IPv6 with port: [2001:db8::1]:8443
+		if strings.HasPrefix(target, "[") {
 			hosts = append(hosts, target)
 			continue
 		}
 
-		// Single host or IP — add default port
+		// Check if it's a bare IPv6 address (contains ":" but is a valid IP)
+		if strings.Contains(target, ":") {
+			if ip := net.ParseIP(target); ip != nil {
+				// Bare IPv6 address — wrap in brackets and add port
+				hosts = append(hosts, fmt.Sprintf("[%s]:%d", target, defaultPort))
+				continue
+			}
+			// Otherwise it's host:port (IPv4 or hostname)
+			hosts = append(hosts, target)
+			continue
+		}
+
+		// Single host or IPv4 IP — add default port
 		hosts = append(hosts, fmt.Sprintf("%s:%d", target, defaultPort))
 	}
 
 	return hosts, nil
 }
 
+// formatHostPort wraps an IP string with port, using brackets for IPv6.
+func formatHostPort(ip string, port int) string {
+	if strings.Contains(ip, ":") {
+		// IPv6 — needs brackets
+		return fmt.Sprintf("[%s]:%d", ip, port)
+	}
+	return fmt.Sprintf("%s:%d", ip, port)
+}
+
 // expandCIDR enumerates all usable host IPs in a CIDR range.
-// Excludes network address and broadcast address.
+// For IPv4: excludes network address and broadcast address.
+// For IPv6: excludes network address only (no broadcast in IPv6).
+// Safety: refuses ranges larger than 65536 hosts.
 func expandCIDR(cidr string) ([]string, error) {
 	ip, ipNet, err := net.ParseCIDR(cidr)
 	if err != nil {
 		return nil, err
+	}
+
+	isIPv6 := ip.To4() == nil
+
+	// Safety: reject excessively large ranges before enumeration.
+	// IPv4: /16 = 65534 hosts (max allowed)
+	// IPv6: /112 = 65536 hosts (max allowed) — anything larger is unreasonable
+	prefixLen, totalBits := ipNet.Mask.Size()
+	hostBits := totalBits - prefixLen
+	if hostBits > 16 {
+		return nil, fmt.Errorf("CIDR range too large: /%d has 2^%d hosts (max prefix: /%d for %d-bit addresses)",
+			prefixLen, hostBits, totalBits-16, totalBits)
 	}
 
 	var ips []string
@@ -200,14 +245,16 @@ func expandCIDR(cidr string) ([]string, error) {
 		ips = append(ips, ip.String())
 	}
 
-	// Remove network address (first) and broadcast address (last)
-	if len(ips) > 2 {
-		ips = ips[1 : len(ips)-1]
-	}
-
-	// Safety: refuse to scan more than 65536 hosts at once
-	if len(ips) > 65536 {
-		return nil, fmt.Errorf("CIDR range too large: %d hosts (max 65536)", len(ips))
+	if isIPv6 {
+		// IPv6: no broadcast address. Just skip the network address (first).
+		if len(ips) > 1 {
+			ips = ips[1:]
+		}
+	} else {
+		// IPv4: skip network address (first) and broadcast address (last).
+		if len(ips) > 2 {
+			ips = ips[1 : len(ips)-1]
+		}
 	}
 
 	return ips, nil
