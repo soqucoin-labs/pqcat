@@ -21,7 +21,7 @@ pqcat scan tls agency.gov --framework fisma --html report.html --save-db
 
 | Feature | Enclave (Air-Gapped) | Pro (Connected) |
 |---|---|---|
-| CLI scanner (7 modules) | ✓ | ✓ |
+| CLI scanner (9 modules + auto-detect) | ✓ | ✓ |
 | TUI terminal dashboard | ✓ | ✓ |
 | Self-contained HTML reports | ✓ | ✓ |
 | SQLite scan history & POA&M | ✓ | ✓ |
@@ -40,7 +40,7 @@ The scanner is open-source (Apache 2.0). The Pro edition (compliance engine, das
 # Build
 make
 
-# Scan
+# Scan (auto-deep for single targets)
 ./pqcat scan tls example.com --framework nist
 
 # Full assessment with report
@@ -57,7 +57,7 @@ make
 
 | Module | Command | Description |
 |---|---|---|
-| TLS/SSL | `scan tls` | Certificate chain, cipher suites, signature algorithms |
+| TLS/SSL | `scan tls` | **Deep scan**: full cipher enumeration, protocol probing, quantum classification |
 | SSH | `scan ssh` | Key exchange, host key types |
 | SBOM | `scan sbom` | CycloneDX/SPDX crypto dependency analysis |
 | PKI | `scan pki` | Certificate chain walking and CA analysis |
@@ -78,6 +78,31 @@ make linux-amd64  # Cross-compile for Linux x86_64
 ```
 
 > **Pro Edition:** The Pro source code is proprietary and not included in this repository. Pre-built Pro binaries are available from [GitHub Releases](https://github.com/soqucoin-labs/pqcat/releases). For enterprise licensing, contact [labs@soqu.org](mailto:labs@soqu.org).
+
+## TLS Deep Scan (v2.4.0)
+
+PQCAT's deep scan mode provides **SSL Labs-grade TLS assessment** with quantum-risk classification — in a single binary, air-gap safe, 90x faster.
+
+```bash
+# Deep scan (default for single targets)
+pqcat scan tls example.com
+
+# Explicit deep mode for network ranges
+pqcat scan tls 10.0.0.0/24 --deep
+
+# Force fast mode (single-connection, ~1s)
+pqcat scan tls example.com --fast
+```
+
+**What deep scan detects:**
+- Full cipher suite enumeration (20+ suites per target)
+- Protocol version matrix (TLS 1.0–1.3, SSLv3, SSLv2)
+- Raw TCP probes for legacy protocols (SSLv3/SSLv2, export ciphers)
+- Complete certificate chain with SANs, fingerprints, OCSP, SCTs
+- HTTP security headers (HSTS, CSP, X-Frame-Options)
+- Server cipher preference detection
+- **Every component classified**: RED (quantum-vulnerable) / GREEN (quantum-safe)
+- Prioritized remediation actions with CNSA 2.0 / NIST references
 
 ## Security
 
@@ -110,7 +135,7 @@ PQCAT Pro includes enterprise-grade security out of the box:
 
 ```
 ┌── Discovery Layer ──────────────── Open Source (Apache 2.0) ──┐
-│  7 scanner modules + algorithm classifier + data models       │
+│  9 scanner modules + algorithm classifier + data models       │
 ├── Intelligence Layer ────────────── Proprietary ──────────────┤
 │  Compliance engine + scoring + threat intel                   │
 ├── Security Layer ─────────────────────────────────────────────┤

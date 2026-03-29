@@ -122,6 +122,15 @@ API key authentication grants **admin** privileges.
 | GET | `/api/poam` | viewer | POA&M entries across all scans |
 | PUT | `/api/poam` | analyst | Update POA&M item status |
 
+### Persona Views (Dashboard)
+
+| Method | Path | Min Role | Description |
+|---|---|---|---|
+| GET | `/api/v1/views/auditor` | viewer | Evidence tables, NIST 800-53 control mapping, OSCAL/CBOM export links |
+| GET | `/api/v1/views/cio` | viewer | Budget planning, vendor risk register, migration simulator recommendations |
+| GET | `/api/v1/views/ciso` | viewer | Quantum threat assessment (HNDL, cert chain), remediation priorities |
+| GET | `/api/v1/views/executive` | viewer | Board-ready summary: status indicators, key metrics, milestone tracking |
+
 ### Reports & Export
 
 | Method | Path | Min Role | Description |
@@ -157,6 +166,16 @@ API key authentication grants **admin** privileges.
 | GET | `/api/audit-log/verify` | Verify HMAC chain integrity |
 | GET | `/metrics` | Prometheus-compatible metrics |
 
+### Scheduling & Alerts (analyst+)
+
+| Method | Path | Min Role | Description |
+|---|---|---|---|
+| GET | `/api/schedules` | analyst | List recurring scan schedules |
+| POST | `/api/schedules` | analyst | Create a new recurring scan |
+| DELETE | `/api/schedules?id=N` | analyst | Remove a scheduled scan |
+| GET | `/api/alerts` | analyst | List alert rules (webhook, Slack, email, CDM) |
+| POST | `/api/alerts` | analyst | Create a new alert rule |
+
 #### GET `/api/audit-log/verify` — HMAC Chain Integrity
 
 ```json
@@ -168,6 +187,59 @@ API key authentication grants **admin** privileges.
 ```
 
 If `intact` is `false`, `broken_at_entry` identifies the first tampered row.
+
+### Notifications (analyst+)
+
+| Method | Path | Min Role | Description |
+|---|---|---|---|
+| GET | `/api/notifications` | analyst | List notifications + unread count |
+| POST | `/api/notifications` | analyst | Mark read, dismiss, or clear notifications |
+
+#### GET `/api/notifications`
+
+Returns recent notifications and unread count:
+```json
+{
+  "notifications": [
+    {
+      "id": 1,
+      "category": "scan",
+      "severity": "success",
+      "title": "Scan Passed",
+      "message": "example.com scored 92.5 on PQC compliance assessment",
+      "source": "scan",
+      "source_id": 42,
+      "read": false,
+      "created_at": "2026-03-28T10:30:00Z"
+    }
+  ],
+  "unread_count": 3
+}
+```
+
+#### POST `/api/notifications`
+
+Manage notification state. Actions: `mark_read`, `mark_all_read`, `dismiss`, `dismiss_all`.
+
+```json
+// Mark a single notification as read
+{"action": "mark_read", "id": 1}
+
+// Mark all as read
+{"action": "mark_all_read"}
+
+// Dismiss (remove) a single notification
+{"action": "dismiss", "id": 1}
+
+// Clear all notifications
+{"action": "dismiss_all"}
+```
+
+Response: `{"status": "ok", "unread_count": 0}`
+
+Severity levels: `info`, `success`, `warning`, `critical`
+
+Categories: `scan`, `drift`, `alert`, `license`, `system`
 
 ### Dashboard
 

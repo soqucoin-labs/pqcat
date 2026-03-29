@@ -86,7 +86,7 @@ Both editions are built from the same codebase using Go build tags. The Enclave 
 
 | Capability | Enclave | Pro |
 |---|---|---|
-| CLI scanner (7 modules) | ✓ | ✓ |
+| CLI scanner (9 modules + auto-detect) | ✓ | ✓ |
 | TUI terminal dashboard | ✓ | ✓ |
 | Self-contained HTML reports | ✓ | ✓ |
 | SQLite scan history & POA&M | ✓ | ✓ |
@@ -275,7 +275,7 @@ All configuration fields can be overridden via `PQCAT_` prefixed environment var
 
 | Type | Command | Description |
 |---|---|---|
-| TLS/SSL | `pqcat scan tls <target>` | Certificate chain, cipher suites, signature algorithms |
+| TLS/SSL | `pqcat scan tls <target>` | **Deep scan**: full cipher enumeration, protocol probing, legacy detection, quantum classification |
 | SSH | `pqcat scan ssh <target>` | Key exchange algorithms, host key types |
 | SBOM | `pqcat scan sbom <path>` | CycloneDX/SPDX bill-of-materials crypto analysis |
 | PKI | `pqcat scan pki <path>` | Certificate chain walking and CA analysis |

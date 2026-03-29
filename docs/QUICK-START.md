@@ -1,88 +1,97 @@
 # PQCAT Quick Start
 
+Get scanning in 60 seconds.
+
 ## Install
 
+**macOS / Linux:**
 ```bash
-# Step 1: Download from releases
-curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v2.0.1/pqcat-2.0.1-linux-amd64.tar.gz
-
-# Step 2: Extract the binary
-tar xzf pqcat-2.0.1-linux-amd64.tar.gz
-
-# Step 3: Install to your PATH
-chmod +x pqcat-2.0.1-linux-amd64
-sudo mv pqcat-2.0.1-linux-amd64 /usr/local/bin/pqcat
-
-# From source
-git clone https://github.com/soqucoin-labs/pqcat.git && cd pqcat
-make pro
+curl -sSL https://install.pqcat.io | sh
 ```
+
+**Windows (PowerShell):**
+```powershell
+irm https://install.pqcat.io/windows | iex
+```
+
+**Verify installation:**
+```bash
+pqcat version
+pqcat doctor     # Full system health check
+```
+
+> **Pro tip:** Run `pqcat quickstart` for an interactive guided setup.
+
+---
 
 ## First Scan
 
 ```bash
-# Scan a website's TLS configuration
-pqcat scan tls example.com
+# Auto-detect — PQCAT figures out the scan type
+pqcat scan example.com
 
-# Scan SSH keys on a server
-pqcat scan ssh 10.0.0.1
-
-# Scan an entire subnet (50 workers)
-pqcat scan tls 10.0.0.0/24 --workers 50
-
-# Scan an SBOM file
-pqcat scan sbom ./bom.json
-
-# Scan source code for crypto APIs
-pqcat scan code ./src/
-
-# Scan PKI certificates
-pqcat scan pki /etc/ssl/certs/
-
+# Or be explicit:
+pqcat scan tls example.com           # TLS deep scan (ciphers, protocols, certs, quantum risk)
+pqcat scan ssh 10.0.0.1              # SSH host keys
+pqcat scan tls 10.0.0.0/24 --workers 50  # Entire subnet
+pqcat scan sbom ./bom.json           # SBOM (CycloneDX/SPDX)
+pqcat scan code ./src/               # Source code crypto APIs
+pqcat scan pki /etc/ssl/certs/       # PKI X.509 certificates
 ```
+
+---
 
 ## Generate Reports
 
 ```bash
-# JSON report (machine-readable)
-pqcat scan tls example.com --json --output report.json
+# All reports at once (PDF, HTML, CBOM, Executive, OSCAL)
+pqcat scan tls example.com --all-reports
 
-# PDF Crypto Bill of Health
+# Individual formats
 pqcat scan tls example.com --pdf report.pdf
-
-# HTML report (self-contained, works offline)
 pqcat scan tls example.com --html report.html
-
-# Executive briefing PDF
 pqcat scan tls example.com --briefing exec-brief.pdf
-
-# OSCAL assessment results (NIST v1.2.1)
-pqcat scan tls example.com --oscal assessment.json
-
-# Cryptographic Bill of Materials (CycloneDX v1.6)
 pqcat scan tls example.com --cbom cbom.json
+pqcat scan tls example.com --oscal assessment.json
+pqcat scan tls example.com --json report.json
 ```
 
-## Migration Simulator
+---
+
+## Scan History & Comparison
 
 ```bash
-# Model your PQC migration timeline
-pqcat simulate tls example.com --org-size medium --budget moderate --team-size 3
-
-# Set a target score and hard deadline
-pqcat simulate tls example.com --target-score 95 --target-date 2027-12-31
-
-# Output as JSON for integration
-pqcat simulate tls example.com --json --output simulation.json
+pqcat history                       # List past scans
+pqcat history show 42               # Details for scan #42
+pqcat history diff 41 42            # Compare two scans side-by-side
 ```
 
-## Start Dashboard
+---
+
+## Alerting & Continuous Monitoring
 
 ```bash
-# Pro edition — web dashboard on :8443
-pqcat-pro serve
+# Watch for changes every 60 seconds
+pqcat scan tls example.com --watch 60
 
-# ⚠️ First run prints a random admin password to the console!
+# Test alert channels
+pqcat alert test --webhook https://hooks.slack.com/...
+pqcat alert list
+
+# Save/compare baselines
+pqcat scan tls example.com --save-baseline baseline.json
+pqcat scan tls example.com --baseline baseline.json
+```
+
+---
+
+## Start Dashboard (Pro Edition)
+
+```bash
+# Start the web dashboard
+pqcat serve
+
+# ⚠ First run prints a random admin password to the console!
 # Copy it immediately — it is shown only once.
 
 # Open https://localhost:8443 in browser
@@ -92,36 +101,48 @@ pqcat-pro serve
 pqcat dashboard
 ```
 
-## Continuous Monitoring
+---
+
+## Migration Simulator
 
 ```bash
-# Watch for changes every 60 seconds
-pqcat scan tls example.com --watch 60
-
-# Save a baseline for drift detection
-pqcat scan tls example.com --save-baseline baseline.json
-
-# Compare against baseline
-pqcat scan tls example.com --baseline baseline.json
+pqcat simulate tls example.com --org-size medium --budget moderate --team-size 3
+pqcat simulate tls example.com --target-score 95 --target-date 2027-12-31
 ```
+
+---
+
+## Keep PQCAT Updated
+
+```bash
+pqcat self-update              # Upgrade to latest version
+pqcat self-update --check      # Check without installing
+```
+
+---
 
 ## Key Commands
 
 | Command | Description |
 |---|---|
-| `scan tls HOST` | Scan TLS certificates and cipher suites |
-| `scan ssh HOST` | Scan SSH host keys |
-| `scan sbom FILE` | Analyze SBOM for crypto libraries |
-| `scan pki PATH` | Scan PKI certificates |
-| `scan code DIR` | Scan source code for crypto APIs |
-| `scan hsm [auto]` | Discover HSMs, KMS, keystores |
-| `simulate TYPE TARGET` | Model PQC migration timeline |
+| `scan [type] <target>` | Core scanning (9 types + auto-detect) |
 | `serve` | Start web dashboard (Pro) |
-| `dashboard` | Terminal dashboard (TUI) |
-| `benchmark` | Run cryptographic benchmarks |
-| `verify FILE` | Verify report seal and integrity |
+| `dashboard` | Terminal dashboard (Enclave TUI) |
 | `quickstart` | Interactive first-run wizard |
-| `version` | Show version and edition |
+| `history` | List, show, or diff past scans |
+| `alert test/list` | Manage alert channels |
+| `simulate <type> <target>` | Model PQC migration timeline |
+| `self-update` | Upgrade to latest release |
+| `doctor` | System health check |
+| `benchmark` | Run cryptographic benchmarks |
+| `verify <file>` | Verify report seal integrity |
+| `license status/features` | License lifecycle management |
+| `config validate/show` | Configuration management |
+| `version` | Show version, edition, and license |
+| `completion bash/zsh/fish` | Generate shell completions |
+| `help <topic>` | Help on frameworks, scoring, errors, examples, privacy, intro |
+
+---
 
 ## Configuration
 
@@ -134,6 +155,13 @@ environment: "production"
 scanner:
   workers: 4
   timeout: 30s
+
+# Branded reports (Pro)
+branding:
+  logo_path: "./logo.jpeg"
+  accent_color: "#003366"
+  organization_full: "Department of Defense - CISO Office"
+  classification: "TLP:AMBER"
 ```
 
-See `docs/DEPLOYMENT.md` for full configuration reference, and `docs/ADMIN-GUIDE.md` for user management and RBAC setup.
+See `docs/DEPLOYMENT.md` for full configuration reference, `docs/ADMIN-GUIDE.md` for user management and RBAC, `docs/COOKBOOK.md` for common workflows, and `docs/TROUBLESHOOTING.md` for error resolution.

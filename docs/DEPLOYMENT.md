@@ -3,43 +3,64 @@
 ## Prerequisites
 
 - Go 1.25+ (build only — not needed at runtime)
-- Target: Linux amd64/arm64, macOS, or Windows
+- Target: Linux amd64/arm64, macOS amd64/arm64, Windows amd64
 
-## Quick Deploy (Binary)
+## Quick Deploy
+
+### One-Line Install (Recommended)
+
+**macOS / Linux:**
+```bash
+curl -sSL https://install.pqcat.io | sh
+```
+
+**Windows (PowerShell — run as Administrator):**
+```powershell
+irm https://install.pqcat.io/windows | iex
+```
+
+The installer auto-detects your OS and architecture, downloads the correct binary, verifies the SHA-256 checksum, and adds `pqcat` to your PATH.
+
+### Windows MSI (Enterprise)
+
+For Group Policy / SCCM / Intune deployment, download the `.msi` from the [releases page](https://github.com/soqucoin-labs/pqcat/releases). The MSI installs to `C:\Program Files\PQCAT\`, adds to PATH, and registers in Add/Remove Programs.
+
+### Manual Binary Download
 
 ```bash
-# Step 1: Download from releases
-curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v2.0.1/pqcat-2.0.1-linux-amd64.tar.gz
+# Download from GitHub releases
+curl -LO https://github.com/soqucoin-labs/pqcat/releases/latest/download/pqcat-linux-amd64.tar.gz
 
-# Step 2: Extract the binary
-tar xzf pqcat-2.0.1-linux-amd64.tar.gz
+# Extract and install
+tar xzf pqcat-linux-amd64.tar.gz
+chmod +x pqcat
+sudo mv pqcat /usr/local/bin/
 
-# Step 3: Install to your PATH
-chmod +x pqcat-2.0.1-linux-amd64
-sudo mv pqcat-2.0.1-linux-amd64 /usr/local/bin/pqcat
+# Verify
+pqcat version
+pqcat doctor
+```
 
-# Verify checksum (SHA-384, CNSA 2.0 compliant)
-curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v2.0.1/checksums.sha384
-shasum -a 384 -c checksums.sha384
+## Upgrade
 
-# Run
-pqcat scan tls example.com
-pqcat serve  # Start dashboard on :8443 (Pro edition)
+```bash
+pqcat self-update              # Download and install latest version
+pqcat self-update --check      # Check for updates without installing
 ```
 
 ## Build from Source
 
 ```bash
-git clone https://github.com/soqucoin-labs/pqcat.git
-cd pqcat
+git clone https://github.com/soqucoin-labs/pqcat-engine.git
+cd pqcat-engine
 
-# Pro edition (REST API + dashboard)
-make pro
+# Enclave edition (air-gap safe, zero outbound network)
+go build ./cmd/pqcat/
 
-# Air-Gapped edition (air-gap safe, zero outbound network)
-make airgap
+# Pro edition (REST API + dashboard + RBAC)
+go build -tags connected ./cmd/pqcat/
 
-# Verify static binary
+# Verify static binary (Linux)
 file pqcat && ldd pqcat  # should show "statically linked"
 ```
 
@@ -51,8 +72,8 @@ cp pqcat.yaml.example pqcat.yaml   # edit config
 docker compose up -d
 
 # Manual Docker
-docker build --target pro -t pqcat-pro .
-docker run -d -p 8443:8443 -v pqcat-data:/data pqcat-pro serve
+docker build --target pro -t pqcat .
+docker run -d -p 8443:8443 -v pqcat-data:/data pqcat serve
 ```
 
 ## Federal / Air-Gap Deployment
@@ -65,7 +86,7 @@ docker run -d -p 8443:8443 -v pqcat-data:/data pqcat-pro serve
 
 ```bash
 # On build machine
-make airgap
+go build ./cmd/pqcat/
 shasum -a 384 pqcat > pqcat.sha384
 
 # On target (air-gapped)
@@ -92,7 +113,23 @@ server:
 siem:
   endpoint: "https://splunk.example.gov:8088"
   format: splunk
+
+# Branded reports (Pro)
+branding:
+  logo_path: "/etc/pqcat/agency-logo.jpeg"
+  accent_color: "#003366"
+  organization_full: "Department of Example — CISO Office"
+  classification: "TLP:AMBER"
 ```
+
+### Configuration Precedence (highest → lowest)
+
+1. CLI flags (`--framework cnsa2`)
+2. Environment variables (`PQCAT_FRAMEWORK=cnsa2`)
+3. `--config` flag path
+4. `./pqcat.yaml` (current directory)
+5. `~/.pqcat/config.yaml`
+6. `/etc/pqcat/pqcat.yaml`
 
 ### Environment Variable Overrides
 
@@ -129,15 +166,15 @@ All API endpoints require authentication (except `/api/health`):
 
 ```bash
 # Session-based (interactive)
-curl -X POST http://localhost:8443/api/auth/login \
+curl -X POST https://localhost:8443/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"<password>"}'
 
 # API key (automation)
-curl -H "X-PQCAT-Token: your-key" http://localhost:8443/api/stats
+curl -H "X-PQCAT-Token: your-key" https://localhost:8443/api/stats
 
 # Bearer token
-curl -H "Authorization: Bearer your-key" http://localhost:8443/api/stats
+curl -H "Authorization: Bearer your-key" https://localhost:8443/api/stats
 ```
 
 ### Rate Limiting
@@ -146,37 +183,40 @@ Per-IP token-bucket rate limiter. Returns `429 Too Many Requests` with `Retry-Af
 
 ### TLS Termination
 
-For production, use a reverse proxy (nginx, Caddy, HAProxy) for TLS termination:
+PQCAT Pro auto-generates a self-signed TLS certificate on first run. For production, use a reverse proxy (nginx, Caddy, HAProxy) or provide your own certificates:
 
-```nginx
-server {
-    listen 443 ssl;
-    ssl_certificate /etc/pki/tls/certs/pqcat.pem;
-    ssl_certificate_key /etc/pki/tls/private/pqcat.key;
-    location / {
-        proxy_pass http://127.0.0.1:8443;
-    }
-}
+```bash
+# Via environment variables
+PQCAT_TLS_CERT=/etc/pki/tls/certs/pqcat.pem \
+PQCAT_TLS_KEY=/etc/pki/tls/private/pqcat.key \
+pqcat serve
 ```
 
 ## Health Check
 
 ```bash
-curl http://localhost:8443/api/health
-# {"status":"ok","version":"2.0.1","edition":"Pro"}
+curl -k https://localhost:8443/api/health
+# {"status":"ok","version":"2.3.0","edition":"Pro"}
+```
+
+## Uninstall
+
+**macOS / Linux:**
+```bash
+sudo rm /usr/local/bin/pqcat
+rm -rf ~/.pqcat/
+```
+
+**Windows:**
+Use Add/Remove Programs, or:
+```powershell
+Remove-Item "$env:ProgramFiles\PQCAT" -Recurse -Force
 ```
 
 ## Code Signing
 
-Release binaries should be verified via SHA-384 checksums published alongside each release:
+Release binaries are verified via SHA-256 checksums published alongside each release. The install script verifies checksums automatically.
 
 ```bash
-shasum -a 384 -c checksums.sha384
-```
-
-For organizational signing, add GPG signatures:
-
-```bash
-make release-sign  # Signs all artifacts with GPG key
-gpg --verify SHA384SUMS.asc SHA384SUMS
+shasum -a 256 -c checksums.sha256
 ```

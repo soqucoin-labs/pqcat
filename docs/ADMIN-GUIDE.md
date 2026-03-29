@@ -250,4 +250,141 @@ If `PQCAT_AUDIT_KEY` is not set, a random key is generated at startup. **To pres
 
 ---
 
-*PQCAT Pro — Soqucoin Labs Inc.*
+## Confidential Compliance Engine (CCE)
+
+The CCE provides privacy-preserving assessment evidence through a 3-layer architecture:
+
+| Layer | Mechanism | CLI Flag | Purpose |
+|-------|-----------|----------|---------|
+| **1** | Asset Anonymization | `--confidential` | BLAKE2b-hashed locations with ephemeral salt |
+| **2** | Aggregate-Only Mode | `--aggregate-only` | Strip individual assets, preserve only zone counts and scores |
+| **3** | ML-DSA-44 Report Seal | *(automatic)* | FIPS 204 post-quantum digital signature on all CCE reports |
+
+### Usage
+
+```bash
+# Anonymized scan — share results without exposing asset names/IPs
+pqcat scan tls agency.gov --confidential --save-db
+
+# Aggregate-only — share compliance scores without inventory
+pqcat scan tls agency.gov --aggregate-only --save-db
+
+# Full HNDL risk assessment
+pqcat scan tls agency.gov --data-retention 25y --q-day-year 2035 --confidential
+```
+
+The **CCE Evidence** tab in the Pro dashboard displays sealed report history, privacy architecture reference, and HNDL risk methodology documentation.
+
+---
+
+## Migration Simulator
+
+Model PQC migration timelines from the dashboard or CLI:
+
+```bash
+pqcat simulate tls agency.gov \
+  --org-size medium \
+  --budget moderate \
+  --team-size 4 \
+  --target-score 95 \
+  --framework cnsa2
+```
+
+### Parameters
+
+| Parameter | Options | Description |
+|-----------|---------|-------------|
+| `--org-size` | small, medium, large, enterprise | Number of cryptographic assets to migrate |
+| `--budget` | constrained, moderate, aggressive | Resource allocation level |
+| `--team-size` | 1–100 | Number of security engineers available |
+| `--target-score` | 50–100 | Desired compliance score |
+| `--framework` | cnsa2, nsm10, fisma, fedramp, pci | Compliance framework for migration targets |
+
+The simulator uses the latest scan data to estimate migration phases, person-months, and projected score improvements.
+
+---
+
+## Scheduled Scans & Alerts
+
+### Automated Recurring Scans
+
+```bash
+# CLI: watch mode (reruns every 6 hours)
+pqcat scan tls agency.gov --watch 6h
+
+# API: create recurring schedule
+curl -X POST http://localhost:8443/api/schedules \
+  -H "X-PQCAT-Session: <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"scan_type":"tls","target":"agency.gov","interval":"24h","enabled":true}'
+```
+
+### Alert Channels
+
+Configure webhooks, Slack, email, or CDM alerts in `pqcat.yaml`:
+
+```yaml
+alerts:
+  - type: webhook
+    endpoint: "https://hooks.slack.com/services/..."
+    events: ["score_drop", "new_red_asset", "cert_expiry"]
+  - type: email
+    endpoint: "security-team@agency.gov"
+    events: ["score_drop"]
+```
+
+The **Scheduled Scans** tab in the Pro dashboard provides a form-based interface for managing schedules and alert channels.
+
+---
+
+## Notification Center
+
+The Pro dashboard includes a persistent notification center (bell icon in the header). Notifications are generated automatically by:
+
+- **Scan completions** — severity based on compliance score (≥80 = success, 50-79 = warning, <50 = critical)
+- **Drift alerts** — when continuous monitoring detects score changes
+- **License events** — expiring or expired license warnings
+- **System events** — scheduled scan failures, database errors
+
+### Notification Management
+
+**Dashboard:** Click the bell icon to view the notification panel. Mark individual or all notifications as read. Dismiss individual or clear all.
+
+**API:**
+```bash
+# List notifications + unread count
+curl -H "X-PQCAT-Session: <token>" https://localhost:8443/api/notifications
+
+# Mark all as read
+curl -X POST -H "X-PQCAT-Session: <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"mark_all_read"}' \
+  https://localhost:8443/api/notifications
+```
+
+Notifications are polled every 30 seconds in the dashboard. Clicking a scan notification navigates directly to the scan result in the History tab.
+
+---
+
+## Branded Reports
+
+Customize PDF reports with your organization's branding:
+
+```yaml
+# pqcat.yaml
+branding:
+  logo_path: "/path/to/logo.jpeg"       # JPEG, PNG, or SVG
+  accent_color: "#003366"                # Hex color for headings and borders
+  organization_full: "Department of Defense — CISO Office"
+  classification: "TLP:AMBER"            # Displayed on cover page and headers
+```
+
+Branded reports include:
+- Full-bleed cover page with organization name and logo
+- Accent-colored section headers and divider lines
+- TLP classification label on every page
+- "Prepared for" attribution with date and scan metadata
+
+---
+
+*PQCAT Pro v2.3.0 — Soqucoin Labs Inc.*
