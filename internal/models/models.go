@@ -49,6 +49,7 @@ const (
 	AssetPKICert    AssetType = "pki_certificate"
 	AssetCodeCrypto AssetType = "code_crypto_call"
 	AssetHSMModule  AssetType = "hsm_module"
+	AssetConfig     AssetType = "config_setting"
 )
 
 // Criticality represents the importance of an asset.

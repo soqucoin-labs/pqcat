@@ -12,6 +12,7 @@ import (
 
 	"github.com/soqucoin-labs/pqcat/internal/classifier"
 	"github.com/soqucoin-labs/pqcat/internal/models"
+	"github.com/soqucoin-labs/pqcat/internal/tui"
 )
 
 // cryptoPattern represents a crypto API usage pattern to scan for.
@@ -919,17 +920,28 @@ func ScanCode(target string) (*models.ScanResult, error) {
 		files = []string{target}
 	}
 
+	// GAP-08: Progress indicator for code scans
+	quiet := os.Getenv("PQCAT_QUIET") == "1"
+	progress := tui.NewProgress("Scanning source code", len(files), quiet)
+
 	totalFindings := 0
 	filesWithCrypto := 0
 
-	for _, file := range files {
+	for i, file := range files {
 		findings := scanFileForCrypto(file)
 		if len(findings) > 0 {
 			filesWithCrypto++
 			totalFindings += len(findings)
 			result.Assets = append(result.Assets, findings...)
 		}
+		// Update progress every 10 files or on the last file
+		if (i+1)%10 == 0 || i == len(files)-1 {
+			progress.Update(i+1, filepath.Base(file))
+		}
 	}
+
+	progress.Done(fmt.Sprintf("Scanned %d files, %d findings in %d files",
+		len(files), totalFindings, filesWithCrypto))
 
 	result.Duration = time.Since(start)
 	result.Details = map[string]string{
@@ -942,8 +954,12 @@ func ScanCode(target string) (*models.ScanResult, error) {
 }
 
 // findCodeFiles recursively finds source code files, skipping common non-source dirs.
+// Supports .pqcatignore for custom exclusion patterns (POL-09).
 func findCodeFiles(dir string) ([]string, error) {
 	var files []string
+
+	// POL-09: Load .pqcatignore patterns
+	ignorePatterns := loadPqcatIgnore(dir)
 
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -955,6 +971,12 @@ func findCodeFiles(dir string) ([]string, error) {
 			if skipDirs[base] {
 				return filepath.SkipDir
 			}
+			return nil
+		}
+
+		// POL-09: Check .pqcatignore patterns
+		relPath, _ := filepath.Rel(dir, path)
+		if matchesIgnorePattern(relPath, ignorePatterns) {
 			return nil
 		}
 
@@ -972,6 +994,68 @@ func findCodeFiles(dir string) ([]string, error) {
 	})
 
 	return files, err
+}
+
+// loadPqcatIgnore reads .pqcatignore patterns from the target directory and parents.
+// Patterns use gitignore-style glob syntax (one pattern per line, # for comments).
+func loadPqcatIgnore(dir string) []string {
+	var patterns []string
+
+	// Check target dir first, then walk up to root
+	current := dir
+	for {
+		ignorePath := filepath.Join(current, ".pqcatignore")
+		if data, err := os.ReadFile(ignorePath); err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				line = strings.TrimSpace(line)
+				if line != "" && !strings.HasPrefix(line, "#") {
+					patterns = append(patterns, line)
+				}
+			}
+			break // Use the closest .pqcatignore only
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			break // Reached filesystem root
+		}
+		current = parent
+	}
+
+	return patterns
+}
+
+// matchesIgnorePattern checks if a relative path matches any .pqcatignore pattern.
+func matchesIgnorePattern(relPath string, patterns []string) bool {
+	for _, pattern := range patterns {
+		// Try matching the full relative path
+		if matched, _ := filepath.Match(pattern, relPath); matched {
+			return true
+		}
+		// Try matching just the filename (for simple patterns like "*.min.js")
+		if matched, _ := filepath.Match(pattern, filepath.Base(relPath)); matched {
+			return true
+		}
+		// Support directory patterns (e.g., "vendor/" matches "vendor/foo/bar.go")
+		if strings.HasSuffix(pattern, "/") {
+			dirPattern := strings.TrimSuffix(pattern, "/")
+			if strings.HasPrefix(relPath, dirPattern+"/") || relPath == dirPattern {
+				return true
+			}
+		}
+		// Support ** glob (match any depth)
+		if strings.Contains(pattern, "**") {
+			// Convert ** to a simple prefix/suffix check
+			parts := strings.SplitN(pattern, "**", 2)
+			if len(parts) == 2 {
+				prefix := parts[0]
+				suffix := parts[1]
+				if strings.HasPrefix(relPath, prefix) && strings.HasSuffix(relPath, suffix) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // mapExtensionlessFile maps extensionless filenames to logical extensions so that

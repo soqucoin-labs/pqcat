@@ -42,8 +42,95 @@ type Config struct {
 	// Database
 	Database DatabaseConfig `yaml:"database,omitempty"`
 
+	// Alert channels (webhook, slack, cdm, email)
+	Alerts AlertsConfig `yaml:"alerts,omitempty"`
+
+	// Report branding (logo, accent colors, org tagline)
+	Branding BrandingConfig `yaml:"branding,omitempty"`
+
 	// Server (Pro edition only)
 	Server ServerConfig `yaml:"server,omitempty"`
+}
+
+// BrandingConfig customizes PDF report appearance for enterprise deployments.
+// Logo must be JPEG format (the only image format that PDF 1.4 supports natively
+// without compression libraries). PNG/SVG are not supported in zero-dependency mode.
+type BrandingConfig struct {
+	// LogoPath points to a JPEG logo file. Displayed on cover page and report headers.
+	// Best results: horizontal wordmark, min 400px wide, light or transparent background.
+	LogoPath string `yaml:"logo_path,omitempty" json:"logo_path,omitempty"`
+
+	// AccentColor overrides the navy blue used for section headers and title bar.
+	// Format: hex (#1a3366) or CSS name. Default: PQCAT navy (#1a3361).
+	AccentColor string `yaml:"accent_color,omitempty" json:"accent_color,omitempty"`
+
+	// OrgName overrides the organization name on the cover page.
+	// Falls back to config.Organization if empty.
+	OrgName string `yaml:"org_name,omitempty" json:"org_name,omitempty"`
+
+	// Tagline appears below the org name on the cover page.
+	// Example: "Enterprise Post-Quantum Compliance Division"
+	Tagline string `yaml:"tagline,omitempty" json:"tagline,omitempty"`
+
+	// CoverPage enables a full branded cover page before the report content.
+	// Default: true when branding is configured.
+	CoverPage *bool `yaml:"cover_page,omitempty" json:"cover_page,omitempty"`
+
+	// FooterText overrides the default "Soqucoin Labs Inc." footer line.
+	FooterText string `yaml:"footer_text,omitempty" json:"footer_text,omitempty"`
+
+	// Classification level (TLP:WHITE, TLP:GREEN, TLP:AMBER, TLP:RED, CONFIDENTIAL, etc.)
+	Classification string `yaml:"classification,omitempty" json:"classification,omitempty"`
+}
+
+// AlertsConfig defines alert channel configuration.
+// These are independent of watch mode — they configure where alerts go.
+type AlertsConfig struct {
+	Webhooks     []WebhookDef `yaml:"webhooks,omitempty" json:"webhooks,omitempty"`
+	Slack        *SlackDef    `yaml:"slack,omitempty" json:"slack,omitempty"`
+	CDM          *CDMDef      `yaml:"cdm,omitempty" json:"cdm,omitempty"`
+	Email        *EmailDef    `yaml:"email,omitempty" json:"email,omitempty"`
+	AlertOnScan  bool         `yaml:"alert_on_scan,omitempty" json:"alert_on_scan,omitempty"`
+	AlertOnDrift bool         `yaml:"alert_on_drift,omitempty" json:"alert_on_drift,omitempty"`
+	AlertOnRed   bool         `yaml:"alert_on_red,omitempty" json:"alert_on_red,omitempty"`
+	ScoreDropMin float64      `yaml:"score_drop_min,omitempty" json:"score_drop_min,omitempty"`
+}
+
+// WebhookDef defines webhook config in pqcat.yaml.
+type WebhookDef struct {
+	URL           string            `yaml:"url" json:"url"`
+	Headers       map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`
+	Secret        string            `yaml:"secret,omitempty" json:"secret,omitempty"`
+	TLSSkipVerify bool              `yaml:"tls_skip_verify,omitempty" json:"tls_skip_verify,omitempty"`
+	RetryCount    int               `yaml:"retry_count,omitempty" json:"retry_count,omitempty"`
+}
+
+// SlackDef defines Slack config in pqcat.yaml.
+type SlackDef struct {
+	WebhookURL string `yaml:"webhook_url" json:"webhook_url"`
+	Channel    string `yaml:"channel,omitempty" json:"channel,omitempty"`
+}
+
+// CDMDef defines CDM/syslog config in pqcat.yaml.
+type CDMDef struct {
+	SyslogHost string `yaml:"syslog_host" json:"syslog_host"`
+	Protocol   string `yaml:"protocol" json:"protocol"`
+	Facility   int    `yaml:"facility,omitempty" json:"facility,omitempty"`
+	Format     string `yaml:"format,omitempty" json:"format,omitempty"`
+	AppName    string `yaml:"app_name,omitempty" json:"app_name,omitempty"`
+	AgencyID   string `yaml:"agency_id,omitempty" json:"agency_id,omitempty"`
+}
+
+// EmailDef defines email alert config in pqcat.yaml.
+type EmailDef struct {
+	SMTPHost   string   `yaml:"smtp_host" json:"smtp_host"`
+	SMTPPort   int      `yaml:"smtp_port" json:"smtp_port"`
+	Username   string   `yaml:"username,omitempty" json:"username,omitempty"`
+	Password   string   `yaml:"password,omitempty" json:"password,omitempty"`
+	From       string   `yaml:"from" json:"from"`
+	To         []string `yaml:"to" json:"to"`
+	SubjectPfx string   `yaml:"subject_prefix,omitempty" json:"subject_prefix,omitempty"`
+	UseTLS     bool     `yaml:"use_tls,omitempty" json:"use_tls,omitempty"`
 }
 
 // SIEMConfig configures SIEM integration defaults.
@@ -394,4 +481,121 @@ database:
 #   key_file: "/etc/pqcat/tls/key.pem"
 `, dataDir, dataDir, intelPath, dataDir)
 	return os.WriteFile(path, []byte(template), 0644)
+}
+
+// ValidationIssue represents a single config validation problem.
+type ValidationIssue struct {
+	Field    string
+	Message  string
+	Severity string // "error" or "warning"
+}
+
+// Validate checks the configuration for structural and semantic correctness.
+func Validate(cfg *Config) []ValidationIssue {
+	var issues []ValidationIssue
+
+	// Framework validation
+	validFrameworks := map[string]bool{
+		"cnsa2": true, "nsm10": true, "sp800131a": true,
+		"fisma": true, "fedramp": true, "pci": true,
+		"sox": true, "nydfs": true, "swift": true,
+		"hipaa": true, "cmmc": true,
+	}
+	if cfg.Framework != "" && !validFrameworks[cfg.Framework] {
+		issues = append(issues, ValidationIssue{
+			Field:    "framework",
+			Message:  fmt.Sprintf("unknown framework '%s' (valid: cnsa2, nsm10, sp800131a, fisma, fedramp, pci, sox, nydfs, swift, hipaa, cmmc)", cfg.Framework),
+			Severity: "error",
+		})
+	}
+
+	// Workers validation
+	if cfg.Workers < 1 || cfg.Workers > 500 {
+		issues = append(issues, ValidationIssue{
+			Field:    "workers",
+			Message:  fmt.Sprintf("workers=%d out of valid range 1-500", cfg.Workers),
+			Severity: "error",
+		})
+	} else if cfg.Workers > 100 {
+		issues = append(issues, ValidationIssue{
+			Field:    "workers",
+			Message:  fmt.Sprintf("workers=%d is high — may cause rate-limiting or connection failures", cfg.Workers),
+			Severity: "warning",
+		})
+	}
+
+	// TLS cert files (if TLS is enabled)
+	if cfg.Server.TLS {
+		if cfg.Server.CertFile == "" {
+			issues = append(issues, ValidationIssue{
+				Field:    "server.cert_file",
+				Message:  "TLS enabled but no cert_file specified",
+				Severity: "error",
+			})
+		} else if _, err := os.Stat(cfg.Server.CertFile); os.IsNotExist(err) {
+			issues = append(issues, ValidationIssue{
+				Field:    "server.cert_file",
+				Message:  fmt.Sprintf("cert file not found: %s", cfg.Server.CertFile),
+				Severity: "error",
+			})
+		}
+		if cfg.Server.KeyFile == "" {
+			issues = append(issues, ValidationIssue{
+				Field:    "server.key_file",
+				Message:  "TLS enabled but no key_file specified",
+				Severity: "error",
+			})
+		} else if _, err := os.Stat(cfg.Server.KeyFile); os.IsNotExist(err) {
+			issues = append(issues, ValidationIssue{
+				Field:    "server.key_file",
+				Message:  fmt.Sprintf("key file not found: %s", cfg.Server.KeyFile),
+				Severity: "error",
+			})
+		}
+	}
+
+	// SIEM format validation
+	if cfg.SIEM.Format != "" {
+		validFormats := map[string]bool{"splunk": true, "elk": true, "cef": true, "qradar": true, "sentinel": true}
+		if !validFormats[cfg.SIEM.Format] {
+			issues = append(issues, ValidationIssue{
+				Field:    "siem.format",
+				Message:  fmt.Sprintf("unknown SIEM format '%s' (valid: splunk, elk, cef, qradar, sentinel)", cfg.SIEM.Format),
+				Severity: "error",
+			})
+		}
+	}
+
+	// Intel sidecar path
+	if cfg.Intel.Sidecar != "" {
+		if _, err := os.Stat(cfg.Intel.Sidecar); os.IsNotExist(err) {
+			issues = append(issues, ValidationIssue{
+				Field:    "intel.sidecar",
+				Message:  fmt.Sprintf("intel sidecar file not found: %s", cfg.Intel.Sidecar),
+				Severity: "warning",
+			})
+		}
+	}
+
+	// Data retention
+	if cfg.DataRetention > 0 && cfg.DataRetention < 5 {
+		issues = append(issues, ValidationIssue{
+			Field:    "data_retention",
+			Message:  fmt.Sprintf("data_retention=%d years — HNDL threats require minimum 5-year retention", cfg.DataRetention),
+			Severity: "warning",
+		})
+	}
+
+	// Output directory
+	if cfg.OutputDir != "" && cfg.OutputDir != "." {
+		if _, err := os.Stat(cfg.OutputDir); os.IsNotExist(err) {
+			issues = append(issues, ValidationIssue{
+				Field:    "output_dir",
+				Message:  fmt.Sprintf("output directory does not exist: %s", cfg.OutputDir),
+				Severity: "warning",
+			})
+		}
+	}
+
+	return issues
 }
