@@ -23,16 +23,23 @@ pqcat scan tls agency.gov --framework fisma --html report.html --save-db
 |---|---|---|
 | CLI scanner (9 modules + auto-detect) | ✓ | ✓ |
 | TUI terminal dashboard | ✓ | ✓ |
-| Self-contained HTML reports | ✓ | ✓ |
-| SQLite scan history & POA&M | ✓ | ✓ |
+| Self-contained HTML reports (with TOC) | ✓ | ✓ |
+| SQLite scan history & comparison | ✓ | ✓ |
+| Shell completions (bash/zsh/fish) | ✓ | ✓ |
+| System health check (`pqcat doctor`) | ✓ | ✓ |
+| Self-update (`pqcat self-update`) | ✓ | ✓ |
 | REST API + web dashboard | — | ✓ |
+| 4 persona views (CISO/Auditor/CIO/Exec) | — | ✓ |
+| Notification center | — | ✓ |
 | Role-based access control (RBAC) | — | ✓ |
-| User management & audit logging | — | ✓ |
+| User management & HMAC audit logging | — | ✓ |
+| Branded PDF reports (logo, cover page) | — | ✓ |
 | Prometheus observability (`/metrics`) | — | ✓ |
 | ML-DSA-44 report seals (FIPS 204) | — | ✓ |
-| Live threat intelligence | — | ✓ |
+| Scheduled scans & alert webhooks | — | ✓ |
+| Section 508 / WCAG 2.1 AA accessible | — | ✓ |
 
-The scanner is open-source (Apache 2.0). The Pro edition (compliance engine, dashboard, RBAC, reporting) is distributed as [pre-built signed binaries](https://github.com/soqucoin-labs/pqcat/releases).
+Both editions are built from this codebase. The Enclave edition compiles with **zero network code** beyond scan targets — guaranteed by the compiler.
 
 ## Quick Start
 
@@ -41,7 +48,7 @@ The scanner is open-source (Apache 2.0). The Pro edition (compliance engine, das
 make
 
 # Scan (auto-deep for single targets)
-./pqcat scan tls example.com --framework nist
+./pqcat scan tls example.com --framework fisma
 
 # Full assessment with report
 ./pqcat scan tls example.com --framework fisma --html cboh.html --save-db
@@ -57,13 +64,15 @@ make
 
 | Module | Command | Description |
 |---|---|---|
-| TLS/SSL | `scan tls` | **Deep scan**: full cipher enumeration, protocol probing, quantum classification |
+| TLS/SSL | `scan tls` | **Deep scan**: full cipher enumeration, protocol probing, ML-KEM detection, quantum classification |
 | SSH | `scan ssh` | Key exchange, host key types |
 | SBOM | `scan sbom` | CycloneDX/SPDX crypto dependency analysis |
 | PKI | `scan pki` | Certificate chain walking and CA analysis |
-| Code | `scan code` | Source code pattern scanning (579 patterns, 39 file types) |
+| Code | `scan code` | Source code pattern scanning (556 patterns, 39 file types) |
+| Config | `scan config` | Configuration file analysis (nginx, Apache, OpenSSL, SSH) for weak crypto settings |
 | HSM/KMS | `scan hsm` | Hardware security module key discovery |
-| CIDR | `scan cidr` | Subnet-wide TLS/SSH discovery |
+| SCAP | `scan scap` | SCAP/XCCDF benchmark results for crypto policy compliance |
+| Image | `scan image` | Container image (Docker, OCI) scanning for embedded crypto libraries |
 
 
 ## Build
@@ -79,7 +88,7 @@ make linux-amd64  # Cross-compile for Linux x86_64
 
 > **Pro Edition:** The Pro source code is proprietary and not included in this repository. Pre-built Pro binaries are available from [GitHub Releases](https://github.com/soqucoin-labs/pqcat/releases). For enterprise licensing, contact [labs@soqu.org](mailto:labs@soqu.org).
 
-## TLS Deep Scan (v2.4.0)
+## TLS Deep Scan (v2.5.0)
 
 PQCAT's deep scan mode provides **SSL Labs-grade TLS assessment** with quantum-risk classification — in a single binary, air-gap safe, 90x faster.
 
