@@ -65,8 +65,9 @@ const (
 
 // ComplianceScore represents the normalized compliance assessment.
 type ComplianceScore struct {
-	Overall          float64             `json:"overall"`   // 0-100 normalized
-	Framework        string              `json:"framework"` // "nsm10", "cnsa2", "sp800131a"
+	Overall          float64             `json:"overall"`          // 0-100 normalized risk score
+	QuantumExposure  float64             `json:"quantum_exposure"` // 0-100 percentage of RED assets
+	Framework        string              `json:"framework"`        // "nsm10", "cnsa2", "sp800131a"
 	ZoneCounts       map[Zone]int        `json:"zone_counts"`
 	TotalAssets      int                 `json:"total_assets"`
 	TopActions       []MigrationAction   `json:"top_actions"`

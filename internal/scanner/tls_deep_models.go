@@ -53,6 +53,13 @@ type DeepTLSResult struct {
 	SecureRenegotiation   *SecureRenegotiationResult `json:"secure_renegotiation,omitempty"`  // Blindspot 6
 	PQKeyExchangeDetected bool                       `json:"pq_key_exchange_detected"`        // Blindspot 1 (THE CROWN JEWEL)
 	PQKeyExchangeGroup    string                     `json:"pq_key_exchange_group,omitempty"` // Which PQ group was found
+
+	// HNDL Risk Quantification Engine (Patent: PQCAT-P002)
+	HNDLRisk *HNDLEngineResult `json:"hndl_risk,omitempty"` // Aggregate HNDL risk score
+
+	// Sprint 3 enhancements — Final blindspot closure
+	DNSSECValidation *DNSSECResult   `json:"dnssec_validation,omitempty"` // Blindspot 10
+	DANETLSARecords  *DANETLSAResult `json:"dane_tlsa,omitempty"`         // Blindspot 11
 }
 
 // ProtocolResult records whether a specific TLS/SSL version is supported.

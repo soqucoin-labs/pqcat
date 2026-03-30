@@ -41,16 +41,24 @@ type DeepTLSScanOptions struct {
 	ProbeWorkers int  // Concurrent cipher suite probes (default 8)
 	SkipHTTP     bool // Skip HTTP header checks (for Enclave/air-gap)
 	SkipLegacy   bool // Skip SSLv2/SSLv3 probing
+
+	// HNDL Risk Quantification Engine (Patent: PQCAT-P002)
+	HNDLSensitivity string // FIPS 199: "LOW", "MODERATE", "HIGH" (default: MODERATE)
+	HNDLFramework   string // Framework key: "cnsa2", "fisma", "pci", etc. (default: cnsa2)
+	HNDLRetention   int    // Custom data retention days (0 = use framework default)
+	HNDLQuantumYear int    // Custom quantum timeline year (0 = use framework default)
 }
 
 // DefaultDeepTLSOptions returns production defaults for deep scanning.
 func DefaultDeepTLSOptions() DeepTLSScanOptions {
 	return DeepTLSScanOptions{
-		Timeout:      10 * time.Second,
-		Port:         "443",
-		ProbeWorkers: 8,
-		SkipHTTP:     false,
-		SkipLegacy:   false,
+		Timeout:         10 * time.Second,
+		Port:            "443",
+		ProbeWorkers:    8,
+		SkipHTTP:        false,
+		SkipLegacy:      false,
+		HNDLSensitivity: "MODERATE",
+		HNDLFramework:   "cnsa2",
 	}
 }
 
@@ -221,6 +229,27 @@ func ScanTLSDeep(target string, opts DeepTLSScanOptions) (*DeepTLSResult, *model
 	// ── Phase 10: Secure Renegotiation (Blindspot 6) ──
 	// Check RFC 5746 renegotiation_info extension / SCSV support.
 	result.SecureRenegotiation = checkSecureRenegotiation(host, port, opts.Timeout)
+
+	// ── Phase 11: HNDL Risk Quantification Engine (Patent: PQCAT-P002) ──
+	// Aggregate all discovered cryptographic assets and compute the multi-factor
+	// HNDL risk score: crypto_strength × data_sensitivity × exposure_window × attack_surface.
+	result.HNDLRisk = computeHNDLFromDeepScan(result, opts)
+
+	// ── Phase 12: DNSSEC Validation (Blindspot 10) ──
+	// Check if the domain has DNSSEC deployed, preventing DNS spoofing/cache poisoning.
+	// In a quantum threat model, unsigned DNS responses are trivially forgeable
+	// once Shor's algorithm can break the CA's PKI.
+	if !opts.SkipHTTP { // DNSSEC requires DNS, skip in air-gap mode
+		result.DNSSECValidation = checkDNSSEC(host)
+	}
+
+	// ── Phase 13: DANE/TLSA Records (Blindspot 11) ──
+	// Check for RFC 6698 TLSA records that bind TLS certificates to DNS names.
+	// DANE prevents certificate authority compromise attacks by publishing
+	// certificate fingerprints in DNSSEC-protected DNS.
+	if !opts.SkipHTTP { // DANE requires DNS, skip in air-gap mode
+		result.DANETLSARecords = checkDANETLSA(host, port)
+	}
 
 	result.Duration = time.Since(start)
 
@@ -1218,4 +1247,145 @@ func countSupportedProtocols(deep *DeepTLSResult) string {
 		}
 	}
 	return strings.Join(supported, ", ")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Phase 11: HNDL Risk Quantification Engine Bridge
+// ──────────────────────────────────────────────────────────────────────────────
+
+// computeHNDLFromDeepScan extracts all discovered cryptographic assets from the
+// deep scan results and feeds them into the HNDL Risk Quantification Engine.
+//
+// This is the "connector" between the scan pipeline (which discovers assets)
+// and the HNDL engine (which scores risk). Assets are collected from:
+//   - Cipher suites: key exchange, bulk cipher, MAC algorithms
+//   - Certificate chain: signature algorithms, public key algorithms
+//   - Key exchange groups: named curves and PQ hybrid groups
+//   - OCSP staple: signature algorithm
+//   - SCT signatures: CT log signature algorithms
+//
+// Patent: PQCAT-P002 — Integration of multi-layer cryptographic asset discovery
+// with time-domain risk scoring.
+func computeHNDLFromDeepScan(result *DeepTLSResult, opts DeepTLSScanOptions) *HNDLEngineResult {
+	var assets []HNDLAsset
+
+	// ── Collect from cipher suites ──
+	seen := make(map[string]bool) // Dedup by "source:algorithm"
+	for _, cs := range result.CipherSuites {
+		// Key exchange
+		key := "cipher-kex:" + cs.KeyExchange
+		if !seen[key] && cs.KeyExchange != "" {
+			seen[key] = true
+			assets = append(assets, HNDLAsset{
+				Name:       fmt.Sprintf("Key Exchange: %s", cs.KeyExchange),
+				Algorithm:  cs.KeyExchange,
+				Zone:       cs.KeyExchangeZone,
+				ExpiryDays: -1, // Key exchange is session-based, no expiry
+				Source:     "tls",
+			})
+		}
+
+		// Bulk cipher
+		key = "cipher-bulk:" + cs.BulkCipher
+		if !seen[key] && cs.BulkCipher != "" {
+			seen[key] = true
+			assets = append(assets, HNDLAsset{
+				Name:       fmt.Sprintf("Bulk Cipher: %s", cs.BulkCipher),
+				Algorithm:  cs.BulkCipher,
+				Zone:       cs.BulkCipherZone,
+				KeyBits:    cs.KeySize,
+				ExpiryDays: -1,
+				Source:     "tls",
+			})
+		}
+
+		// Authentication
+		key = "cipher-auth:" + cs.Authentication
+		if !seen[key] && cs.Authentication != "" {
+			seen[key] = true
+			assets = append(assets, HNDLAsset{
+				Name:       fmt.Sprintf("Authentication: %s", cs.Authentication),
+				Algorithm:  cs.Authentication,
+				Zone:       cs.AuthZone,
+				ExpiryDays: -1,
+				Source:     "tls",
+			})
+		}
+	}
+
+	// ── Collect from certificate chain ──
+	for _, cert := range result.CertificateChain {
+		// Signature algorithm
+		assets = append(assets, HNDLAsset{
+			Name:       fmt.Sprintf("Cert Signature: %s (%s)", cert.SignatureAlgorithm, cert.SubjectCN),
+			Algorithm:  cert.SignatureAlgorithm,
+			Zone:       cert.SignatureZone,
+			ExpiryDays: cert.DaysRemaining,
+			Source:     "pki",
+		})
+
+		// Public key algorithm
+		assets = append(assets, HNDLAsset{
+			Name:       fmt.Sprintf("Cert Public Key: %s (%s)", cert.PublicKeyAlgorithm, cert.SubjectCN),
+			Algorithm:  cert.PublicKeyAlgorithm,
+			Zone:       cert.PublicKeyZone,
+			KeyBits:    cert.KeySize,
+			ExpiryDays: cert.DaysRemaining,
+			Source:     "pki",
+		})
+	}
+
+	// ── Collect from key exchange groups ──
+	if result.KeyExchangeGroups != nil {
+		for _, g := range result.KeyExchangeGroups.Groups {
+			if g.Supported {
+				assets = append(assets, HNDLAsset{
+					Name:       fmt.Sprintf("Key Exchange Group: %s", g.Name),
+					Algorithm:  g.Name,
+					Zone:       g.Zone,
+					KeyBits:    g.KeyBits,
+					ExpiryDays: -1,
+					Source:     "tls",
+				})
+			}
+		}
+	}
+
+	// ── Collect from OCSP analysis ──
+	if result.OCSPAnalysis != nil && result.OCSPAnalysis.Stapled {
+		assets = append(assets, HNDLAsset{
+			Name:       fmt.Sprintf("OCSP Staple: %s", result.OCSPAnalysis.SignatureAlgorithm),
+			Algorithm:  result.OCSPAnalysis.SignatureAlgorithm,
+			Zone:       result.OCSPAnalysis.Zone,
+			ExpiryDays: -1,
+			Source:     "tls",
+		})
+	}
+
+	// ── Collect from SCT analysis ──
+	if result.SCTAnalysis != nil {
+		for _, sct := range result.SCTAnalysis.SCTs {
+			assets = append(assets, HNDLAsset{
+				Name:       fmt.Sprintf("SCT Signature: %s (Log: %s)", sct.SignatureAlgo, sct.LogID),
+				Algorithm:  sct.SignatureAlgo,
+				Zone:       sct.Zone,
+				ExpiryDays: -1,
+				Source:     "tls",
+			})
+		}
+	}
+
+	// ── Build HNDL engine input ──
+	profile := GetHNDLProfile(opts.HNDLFramework)
+
+	input := HNDLEngineInput{
+		Sensitivity:         ParseHNDLSensitivity(opts.HNDLSensitivity),
+		Framework:           opts.HNDLFramework,
+		Profile:             profile,
+		Assets:              assets,
+		CustomRetentionDays: opts.HNDLRetention,
+		CustomQuantumYear:   opts.HNDLQuantumYear,
+	}
+
+	return CalculateHNDLRisk(input)
 }
