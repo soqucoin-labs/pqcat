@@ -8,7 +8,7 @@ PQCAT (Post-Quantum Cryptography Assessment Tool) is a compliance scanner that d
 
 ### What's the difference between Enclave and Pro?
 
-**Enclave** is the free, open-source, air-gap-safe edition. It includes all 9 scanner modules, CLI workflows, TUI dashboard, and report generation. It has zero outbound network code compiled in — guaranteed by the Go compiler.
+**Enclave** is the free, open-source, air-gap-safe edition. It includes all 11 scanner modules, CLI workflows, TUI dashboard, and report generation. It has zero outbound network code compiled in — guaranteed by the Go compiler.
 
 **Pro** adds the REST API, web dashboard, multi-user RBAC, SIEM integration, scheduled scans, branded reports, notification center, and Prometheus metrics. Licensed via ML-DSA-65 signed license files.
 

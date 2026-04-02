@@ -86,7 +86,7 @@ Both editions are built from the same codebase using Go build tags. The Enclave 
 
 | Capability | Enclave | Pro |
 |---|---|---|
-| CLI scanner (9 modules + auto-detect) | ✓ | ✓ |
+| CLI scanner (11 modules + auto-detect) | ✓ | ✓ |
 | TUI terminal dashboard | ✓ | ✓ |
 | Self-contained HTML reports | ✓ | ✓ |
 | SQLite scan history & POA&M | ✓ | ✓ |
@@ -146,7 +146,7 @@ pqcat version
 
 ### 6.3 Build from Source (Internal)
 
-> **Note:** Building from source requires the private `pqcat-engine` repository. External users should download pre-built binaries from [GitHub Releases](https://github.com/soqucoin-labs/pqcat/releases).
+> **Note:** The Pro edition source code is licensed separately. Contact labs@soqu.org for enterprise licensing, or download pre-built binaries from [GitHub Releases](https://github.com/soqucoin-labs/pqcat/releases).
 
 ```bash
 # Build Enclave edition (air-gapped, no server code)

@@ -21,7 +21,7 @@ pqcat scan tls agency.gov --framework fisma --html report.html --save-db
 
 | Feature | Enclave (Air-Gapped) | Pro (Connected) |
 |---|---|---|
-| CLI scanner (9 modules + auto-detect) | ✓ | ✓ |
+| CLI scanner (11 modules + auto-detect) | ✓ | ✓ |
 | TUI terminal dashboard | ✓ | ✓ |
 | Self-contained HTML reports (with TOC) | ✓ | ✓ |
 | SQLite scan history & comparison | ✓ | ✓ |
@@ -37,6 +37,7 @@ pqcat scan tls agency.gov --framework fisma --html report.html --save-db
 | Prometheus observability (`/metrics`) | — | ✓ |
 | ML-DSA-44 report seals (FIPS 204) | — | ✓ |
 | Scheduled scans & alert webhooks | — | ✓ |
+| Confidential Compliance Engine (CCE) | — | ✓ |
 | Section 508 / WCAG 2.1 AA accessible | — | ✓ |
 
 Both editions are built from this codebase. The Enclave edition compiles with **zero network code** beyond scan targets — guaranteed by the compiler.
@@ -73,6 +74,8 @@ make
 | HSM/KMS | `scan hsm` | Hardware security module key discovery |
 | SCAP | `scan scap` | SCAP/XCCDF benchmark results for crypto policy compliance |
 | Image | `scan image` | Container image (Docker, OCI) scanning for embedded crypto libraries |
+| CIDR | `scan tls <cidr>` | Subnet-wide TLS and SSH discovery across network ranges |
+| Cloud (CSP) | `scan cloud aws` | AWS KMS, ACM, ELB, S3, Route 53, IAM crypto discovery |
 
 
 ## Build
@@ -88,7 +91,7 @@ make linux-amd64  # Cross-compile for Linux x86_64
 
 > **Pro Edition:** The Pro source code is proprietary and not included in this repository. Pre-built Pro binaries are available from [GitHub Releases](https://github.com/soqucoin-labs/pqcat/releases). For enterprise licensing, contact [labs@soqu.org](mailto:labs@soqu.org).
 
-## TLS Deep Scan (v2.5.0)
+## TLS Deep Scan
 
 PQCAT's deep scan mode provides **SSL Labs-grade TLS assessment** with quantum-risk classification — in a single binary, air-gap safe, 90x faster.
 
@@ -112,6 +115,26 @@ pqcat scan tls example.com --fast
 - Server cipher preference detection
 - **Every component classified**: RED (quantum-vulnerable) / GREEN (quantum-safe)
 - Prioritized remediation actions with CNSA 2.0 / NIST references
+
+## HNDL Risk Engine (v2.6.0)
+
+Patent-pending per-asset "Harvest Now, Decrypt Later" exposure scoring.
+
+- Time-weighted quantum risk based on data sensitivity, retention period, and estimated Q-Day timeline
+- Per-asset HNDL multiplier integrated into compliance scoring
+- Surfaces in scan results, reports, and the Pro dashboard
+
+## Confidential Compliance Engine (CCE)
+
+Prove compliance without revealing your infrastructure. Patent-pending privacy-preserving assessments.
+
+```bash
+pqcat scan tls agency.gov --confidential --framework fisma
+```
+
+- **Asset Anonymization**: BLAKE2b-salted identifiers replace hostnames and IPs
+- **Aggregate-Only Reporting**: Statistical summaries, zero individual asset detail
+- **zk-STARK Verification**: Cryptographic proof of scan completeness and scoring integrity
 
 ## Security
 
@@ -144,7 +167,7 @@ PQCAT Pro includes enterprise-grade security out of the box:
 
 ```
 ┌── Discovery Layer ──────────────── Open Source (Apache 2.0) ──┐
-│  9 scanner modules + algorithm classifier + data models       │
+│  11 scanner modules + algorithm classifier + data models      │
 ├── Intelligence Layer ────────────── Proprietary ──────────────┤
 │  Compliance engine + scoring + threat intel                   │
 ├── Security Layer ─────────────────────────────────────────────┤

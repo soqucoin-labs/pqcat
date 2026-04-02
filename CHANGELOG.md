@@ -3,6 +3,27 @@
 All notable changes to PQCAT will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.6.3] — 2026-04-02
+
+### Changed
+- **Pro Dashboard**: Replaced 12-card scan type grid with compact grouped pill selector organized by category (Network, Code & Supply Chain, Infrastructure, Container, Cloud)
+- **Pro Dashboard**: Added contextual scan type detail bar with description on selection
+- **Pro Dashboard**: Added CCE Advanced Options panel (Confidential Mode, Aggregate Only, Data Retention)
+
+### Improved
+- **CCE Anonymizer**: TARGET field now uses BLAKE2b hash instead of generic `[ANONYMIZED]` literal — provides referential integrity for regulators
+- **CCE Anonymizer**: Details maps (CERT CN, ISSUER, SAN) now selectively hash location-identifying fields while preserving non-identifying data (algorithm, version, protocol)
+- **CCE Anonymizer**: 30 location-identifying key classifications for comprehensive infrastructure topology protection
+- **zk-STARK Proofs**: Verified full Fiat-Shamir prover integration — auto-generated on every scan with `.proof.json` sidecar output
+
+### Documentation
+- **README**: Added Cloud (CSP) and CIDR modules to scanner table (9 → 11 modules)
+- **README**: Added HNDL Risk Engine and Confidential Compliance Engine sections
+- **CHANGELOG**: Full version history through v2.6.3
+- **Public Sync**: Updated all docs to reflect v2.6.3 feature set
+
+---
+
 ## [2.6.2] — 2026-03-30
 
 ### Fixed

@@ -51,8 +51,8 @@ pqcat self-update --check      # Check for updates without installing
 ## Build from Source
 
 ```bash
-git clone https://github.com/soqucoin-labs/pqcat-engine.git
-cd pqcat-engine
+git clone https://github.com/soqucoin-labs/pqcat.git
+cd pqcat
 
 # Enclave edition (air-gap safe, zero outbound network)
 go build ./cmd/pqcat/
