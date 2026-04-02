@@ -3,6 +3,79 @@
 All notable changes to PQCAT will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.6.2] — 2026-03-30
+
+### Fixed
+- **Web Scanner**: Removed phantom `CNSA2.0-Compliance` synthetic finding that inflated transitional asset counts and skewed compliance scores
+- **Public Sync**: Added `tls_sprint3.go` and `hndl_engine.go` to public sync list
+
+---
+
+## [2.6.1] — 2026-03-30
+
+### Fixed
+- **Scoring Engine**: `gofmt` formatting + exposed `quantum_exposure` field in API response
+- **Help Text**: Updated scoring help to document v1.2-fair formula and Quantum Exposure metric
+- **CI**: `gofmt` formatting on cloud scanner, HNDL engine, and TLS sprint 3 files
+
+---
+
+## [2.6.0] — 2026-03-29
+
+### Added — AWS Cloud Scanner (Headline Feature)
+
+Native cloud-native cryptographic asset discovery for AWS environments — the **10th scanner module**.
+
+- **`pqcat scan cloud aws`** — Auto-discovers and classifies every cryptographic asset across AWS services
+- **AWS KMS** — Key policies, rotation status, key spec (RSA vs ECC vs SYMMETRIC), quantum-risk classification
+- **AWS ACM** — Certificate inventory with chain validation, expiry tracking, quantum-vulnerable algorithm detection
+- **AWS ELB/ALB** — TLS listener policies, cipher suite analysis, security policy version assessment
+- **AWS S3** — Bucket encryption configuration, SSE-S3/SSE-KMS/SSE-C classification
+- **AWS Route 53** — DNSSEC signing status per hosted zone
+- **AWS IAM** — Signing certificate inventory and algorithm analysis
+- **Credential auto-detection** — Uses IAM roles, environment variables, or AWS config profiles. Zero configuration required for EC2/ECS
+- **ReadOnlyAccess** — Zero write permissions required. Safe for production environments
+
+### Added — HNDL Risk Engine
+
+Patent-pending per-asset "Harvest Now, Decrypt Later" exposure scoring.
+
+- Calculates time-weighted quantum risk based on data sensitivity, retention period, and estimated Q-Day timeline
+- Integrates HNDL scores into the normalized compliance scoring engine
+- Per-asset exposure metrics surfaced in scan results and reports
+
+### Added — TLS Deep Scan Sprint 3
+
+- **DNSSEC validation** — Full chain-of-trust verification from root to zone
+- **DANE/TLSA** — Certificate association record lookup and validation
+- **Certificate Transparency** — SCT verification via embedded/OCSP/TLS extension
+
+### Changed
+- Scanner module count: 9 → **10** (added Cloud CSP Scanner)
+- Scoring engine: v1.2-fair methodology with honest denominator normalization
+
+---
+
+## [2.5.0] — 2026-03-29
+
+### Changed — Documentation Accuracy Audit
+
+Comprehensive accuracy audit across all documentation files. Removed ghost modules, fixed stale counts, and synchronized all references with actual v2.5.0 codebase.
+
+- **FAQ**: Removed ghost `dns`/`vpn` scan types, added Config/SCAP/Image modules, fixed pattern count 579→556
+- **SOP**: Fixed scan table, architecture diagram, removed ghost `--framework dod/nist` flags
+- **API Reference**: Fixed `scan_type` and `framework` enum lists, corrected pattern/library counts
+- **Quick Start**: Added config/scap/image scan examples
+- **Troubleshooting**: Removed ghost `scan cidr` reference
+- **Admin Guide**: Version references v2.3.0 → v2.5.0
+- **README**: Version references v2.4.0 → v2.5.0, added Config/SCAP/Image modules to module list
+
+### Changed
+- Scanner module count: **9** (TLS, SSH, SBOM, PKI, Code, HSM, Config, SCAP, Image)
+- Code pattern count: 579 → **556** (removed false-positive patterns)
+
+---
+
 ## [2.4.0] — 2026-03-29
 
 ### Added — TLS Deep Scan (Headline Feature)
@@ -77,7 +150,7 @@ SSL Labs-grade TLS assessment with proprietary quantum-risk classification — *
 - **First-Run Onboarding** — Interactive `pqcat quickstart` guided setup
 
 ### Changed
-- Scanner module count: 7 → **9** (added Container Image, Auto-Detect)
+- Scanner module count: 7 → **9** (added Container Image, Config, SCAP)
 - TLS scan default behavior: single targets now use deep scan automatically
 - Dashboard tabs: 18 → **21** (added Persona, Config Scan, Wizard)
 
