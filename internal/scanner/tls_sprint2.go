@@ -5,10 +5,10 @@
 //  2. Secure Renegotiation Check (Blindspot 6) — verify renegotiation_info extension
 //     or SCSV presence to prevent MitM injection attacks
 //  3. ML-KEM / X25519MLKEM768 Detection (Blindspot 1) — THE crown jewel: detect
-//     post-quantum hybrid key exchange. FIRST SCANNER IN THE WORLD TO DO THIS.
-//
-// These are the competitive parity (2) and moonshot (1, 3) features that complete
-// the TLS scanner's journey from "good" to "category-defining".
+//     post-quantum hybrid key exchange with compliance scoring and HNDL integration.
+//     NOTE: Basic ML-KEM detection exists in pqcscan (Anvil Secure, July 2025) and
+//     OpenSSL 3.5+. Our differentiator is multi-framework compliance scoring,
+//     cross-modality correlation, and HNDL Q-Day risk quantification.
 package scanner
 
 import (
@@ -317,8 +317,10 @@ func buildSingleGroupExtension(groupID uint16) []byte {
 // extensions, because TLS 1.3 mandates key_share for the handshake to proceed.
 //
 // This is the CROWN JEWEL feature. If the server supports X25519MLKEM768 (0x11EC),
-// it means they've already deployed post-quantum key exchange. PQCAT would be the
-// FIRST SCANNER IN THE WORLD to detect and report this.
+// it means they've already deployed post-quantum key exchange. While basic ML-KEM
+// detection exists in other tools (pqcscan, OpenSSL 3.5), PQCAT uniquely integrates
+// this into HNDL risk scoring, cross-modality correlation, and multi-framework
+// compliance assessment (CNSA 2.0, FedRAMP, PCI DSS, etc.).
 func buildTLS13GroupProbe(hostname string, groupID uint16) []byte {
 	random := randomClientRandom()
 
@@ -684,13 +686,12 @@ func detectPQKeyExchangeViaGoTLS(host, port string, timeout time.Duration) (bool
 	addr := net.JoinHostPort(host, port)
 	dialer := &net.Dialer{Timeout: timeout}
 
-	// NOTE: As of Go 1.24, X25519MLKEM768 is included by default in TLS 1.3.
-	// We can detect it by checking the CurveID in ConnectionState.
+	// Go 1.24+ includes X25519MLKEM768 by default in TLS 1.3.
+	// Go 1.26 exposes ConnectionState.CurveID for the negotiated group.
 	conn, err := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{
 		InsecureSkipVerify: true,
 		MinVersion:         tls.VersionTLS13,
 		MaxVersion:         tls.VersionTLS13,
-		// Go 1.24+ includes X25519MLKEM768 automatically
 	})
 	if err != nil {
 		return false, ""
@@ -699,32 +700,24 @@ func detectPQKeyExchangeViaGoTLS(host, port string, timeout time.Duration) (bool
 
 	state := conn.ConnectionState()
 
-	// Check the negotiated key exchange group
-	// Go exposes this via CurveID (which despite the name covers all named groups)
-	curveName := getCurveIDName(state)
-	if strings.Contains(strings.ToLower(curveName), "mlkem") ||
-		strings.Contains(strings.ToLower(curveName), "kyber") {
+	// Go 1.26: CurveID is directly available in ConnectionState
+	curveName := state.CurveID.String()
+
+	// Check if the negotiated group is a PQ hybrid
+	switch state.CurveID {
+	case tls.X25519MLKEM768:
+		return true, "X25519MLKEM768"
+	case tls.SecP256r1MLKEM768:
+		return true, "SecP256r1MLKEM768"
+	}
+
+	// Also check by name for any future PQ groups
+	lower := strings.ToLower(curveName)
+	if strings.Contains(lower, "mlkem") || strings.Contains(lower, "kyber") {
 		return true, curveName
 	}
 
 	return false, curveName
-}
-
-// getCurveIDName extracts the curve/group name from a TLS ConnectionState.
-// Handles the case where Go doesn't directly expose TLS 1.3 key exchange info.
-func getCurveIDName(state tls.ConnectionState) string {
-	// Go's ConnectionState doesn't directly expose the key exchange group for TLS 1.3.
-	// But the cipher suite name can hint at it. For TLS 1.3, Go 1.24 internally
-	// records the curve but doesn't export it via the public API.
-	//
-	// We rely on the raw probe (probeTLS13Group) as the primary detection method.
-	// This function is a best-effort secondary check.
-
-	if state.Version == tls.VersionTLS13 {
-		return "TLS_1.3_negotiated" // Can't determine group from Go's public API
-	}
-
-	return "unknown"
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

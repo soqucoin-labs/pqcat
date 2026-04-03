@@ -183,23 +183,9 @@ func ScanTLSDeep(target string, opts DeepTLSScanOptions) (*DeepTLSResult, *model
 		result.CAARecords = checkCAARecords(host)
 	}
 
-	// ── Phase 8: Quantum summary and remediation ──
-	computeQuantumSummary(result)
-	generateRemediation(result)
-
-	// ── Phase 8b: CNSA 2.0 Compliance Gap (CROSS-2) ──
-	// Calculate the gap between current PQ posture and CNSA 2.0 requirements.
-	if result.QuantumSummary.TotalAlgorithms > 0 {
-		pqCompliant := 0
-		if counts, ok := result.QuantumSummary.ZoneCounts[models.ZoneGreen]; ok {
-			pqCompliant = counts
-		}
-		result.CNSA2Gap = calculateCNSA2Gap(
-			result.QuantumSummary.TotalAlgorithms,
-			pqCompliant,
-			quantumYear,
-		)
-	}
+	// NOTE: Quantum summary and CNSA 2.0 gap moved to AFTER Phase 9
+	// (key exchange group probing) so they include ML-KEM and other
+	// key exchange groups in their zone counts. See audit issue #1.
 
 	// ── Phase 9: Key Exchange Group Enumeration (Blindspot 2 + 1) ──
 	// Probe which named groups/curves the server supports, including
@@ -219,11 +205,69 @@ func ScanTLSDeep(target string, opts DeepTLSScanOptions) (*DeepTLSResult, *model
 	}
 
 	// Backup: Try Go's TLS library for PQ detection (works with Go 1.24+)
+	// The raw probe may fail if the server rejects our synthetic key_share data,
+	// but Go's native TLS client sends valid ML-KEM keys and can negotiate successfully.
 	if !result.PQKeyExchangeDetected {
 		if pqDetected, pqGroup := detectPQKeyExchangeViaGoTLS(host, port, opts.Timeout); pqDetected {
 			result.PQKeyExchangeDetected = true
 			result.PQKeyExchangeGroup = pqGroup
+
+			// Inject the detected PQ group into KeyExchangeGroups so it becomes
+			// a CryptoAsset in the report pipeline. The raw probe may have missed it
+			// because servers validate ML-KEM encapsulation keys (unlike X25519
+			// where any 32 bytes is valid).
+			if result.KeyExchangeGroups != nil {
+				// Check if the group is already there (just marked unsupported)
+				found := false
+				for i := range result.KeyExchangeGroups.Groups {
+					if result.KeyExchangeGroups.Groups[i].Name == pqGroup {
+						result.KeyExchangeGroups.Groups[i].Supported = true
+						result.KeyExchangeGroups.Groups[i].Zone = models.ZoneGreen
+						result.KeyExchangeGroups.Groups[i].Reason = "PQ-HYBRID: detected via Go TLS negotiation (server supports ML-KEM hybrid key exchange)"
+						found = true
+						break
+					}
+				}
+				if !found {
+					// Add as new entry
+					groupID := uint16(0x11EC) // X25519MLKEM768 default
+					if pqGroup == "SecP256r1MLKEM768" {
+						groupID = 0x11EB
+					}
+					result.KeyExchangeGroups.Groups = append(result.KeyExchangeGroups.Groups, NamedGroupResult{
+						ID:        groupID,
+						IDHex:     fmt.Sprintf("0x%04X", groupID),
+						Name:      pqGroup,
+						Supported: true,
+						Zone:      models.ZoneGreen,
+						KeyBits:   192,
+						Reason:    "PQ-HYBRID: detected via Go TLS negotiation (server supports ML-KEM hybrid key exchange)",
+					})
+				}
+				result.KeyExchangeGroups.PQGroupFound = true
+				result.KeyExchangeGroups.OverallZone = models.ZoneGreen
+				result.KeyExchangeGroups.Summary = fmt.Sprintf("🟢 PQ-READY: Server supports %s post-quantum hybrid key exchange.", pqGroup)
+			}
 		}
+	}
+
+	// ── Phase 9b: Quantum summary and remediation (moved from Phase 8) ──
+	// Runs AFTER key exchange probing so QuantumSummary includes ML-KEM
+	// and other key exchange groups in zone counts. Fixes audit issue #1.
+	computeQuantumSummary(result)
+	generateRemediation(result)
+
+	// ── Phase 9c: CNSA 2.0 Compliance Gap (CROSS-2) ──
+	if result.QuantumSummary.TotalAlgorithms > 0 {
+		pqCompliant := 0
+		if counts, ok := result.QuantumSummary.ZoneCounts[models.ZoneGreen]; ok {
+			pqCompliant = counts
+		}
+		result.CNSA2Gap = calculateCNSA2Gap(
+			result.QuantumSummary.TotalAlgorithms,
+			pqCompliant,
+			quantumYear,
+		)
 	}
 
 	// ── Phase 10: Secure Renegotiation (Blindspot 6) ──
@@ -682,6 +726,19 @@ func computeQuantumSummary(result *DeepTLSResult) {
 		}
 		if cert.PublicKeyZone == models.ZoneRed {
 			certsVuln++
+		}
+	}
+
+	// Count key exchange group zones (audit fix: these were skipped before)
+	if result.KeyExchangeGroups != nil {
+		for _, g := range result.KeyExchangeGroups.Groups {
+			if g.Supported {
+				zones[g.Zone]++
+				total++
+				if g.Zone == models.ZoneRed {
+					ciphersVuln++ // Count as cipher-equivalent for summary
+				}
+			}
 		}
 	}
 
@@ -1231,6 +1288,141 @@ func deepResultToScanResult(deep *DeepTLSResult) *models.ScanResult {
 				"sans":      strings.Join(cert.SANs, ", "),
 			},
 			Criticality: models.CriticalityStandard,
+		})
+	}
+
+	// Convert key exchange groups to CryptoAssets (Sprint 2: ML-KEM detection)
+	// Without this, probed PQ hybrid groups (X25519MLKEM768, etc.) are invisible
+	// in reports despite being detected. This was the root cause of ML-KEM not
+	// appearing in scan output even when the server supports it.
+	if deep.KeyExchangeGroups != nil {
+		for _, g := range deep.KeyExchangeGroups.Groups {
+			if g.Supported {
+				result.Assets = append(result.Assets, models.CryptoAsset{
+					ID:          fmt.Sprintf("%s:kex-group:%s", deep.Target, g.Name),
+					Type:        models.AssetTLSCipher,
+					Algorithm:   g.Name,
+					KeySize:     g.KeyBits,
+					Zone:        g.Zone,
+					Location:    fmt.Sprintf("%s (key exchange group)", deep.Target),
+					Criticality: models.CriticalityStandard,
+					Details: map[string]string{
+						"component":   "key_exchange_group",
+						"description": g.Reason,
+						"pq_hybrid":   fmt.Sprintf("%v", g.Zone == models.ZoneGreen),
+					},
+				})
+			}
+		}
+	}
+
+	// Convert export/NULL cipher probes to CryptoAssets (audit fix: issue #2)
+	// Any accepted export/NULL/anonymous cipher is a CRITICAL finding that
+	// must be visible in reports and counted in compliance scoring.
+	if deep.ExportNullProbes != nil {
+		for _, suite := range deep.ExportNullProbes.Suites {
+			if suite.Supported {
+				result.Assets = append(result.Assets, models.CryptoAsset{
+					ID:          fmt.Sprintf("%s:export-null:%s", deep.Target, suite.IDHex),
+					Type:        models.AssetTLSCipher,
+					Algorithm:   suite.Name,
+					KeySize:     40, // Export ciphers are 40-bit; NULL is 0-bit
+					Zone:        models.ZoneRed,
+					Location:    fmt.Sprintf("%s (CRITICAL: %s cipher accepted)", deep.Target, suite.Category),
+					Criticality: models.CriticalityHVA,
+					Details: map[string]string{
+						"component":   "export_null_cipher",
+						"category":    suite.Category,
+						"description": suite.Reason,
+						"critical":    "true",
+					},
+				})
+			}
+		}
+	}
+
+	// Convert OCSP staple signature to CryptoAsset (audit fix: issue #3)
+	// The OCSP responder's signature algorithm is quantum-vulnerable if using
+	// RSA or ECDSA — this affects the certificate revocation infrastructure.
+	if deep.OCSPAnalysis != nil && deep.OCSPAnalysis.Stapled {
+		result.Assets = append(result.Assets, models.CryptoAsset{
+			ID:          fmt.Sprintf("%s:ocsp:sig", deep.Target),
+			Type:        models.AssetTLSCert,
+			Algorithm:   deep.OCSPAnalysis.SignatureAlgorithm,
+			KeySize:     0, // Signature algorithm, key size depends on CA
+			Zone:        deep.OCSPAnalysis.Zone,
+			Location:    fmt.Sprintf("%s (OCSP staple signature)", deep.Target),
+			Criticality: models.CriticalityStandard,
+			Details: map[string]string{
+				"component":   "ocsp_signature",
+				"status":      deep.OCSPAnalysis.Status,
+				"description": deep.OCSPAnalysis.Reason,
+			},
+		})
+	}
+
+	// Convert SCT signatures to CryptoAssets (audit fix: issue #3)
+	// Certificate Transparency log signatures are almost universally ECDSA —
+	// quantum-vulnerable signatures that protect the entire CT ecosystem.
+	if deep.SCTAnalysis != nil {
+		for i, sct := range deep.SCTAnalysis.SCTs {
+			result.Assets = append(result.Assets, models.CryptoAsset{
+				ID:          fmt.Sprintf("%s:sct:%d", deep.Target, i),
+				Type:        models.AssetTLSCert,
+				Algorithm:   sct.SignatureAlgo,
+				KeySize:     0,
+				Zone:        sct.Zone,
+				Location:    fmt.Sprintf("%s (CT log %s signature)", deep.Target, sct.LogID),
+				Criticality: models.CriticalityStandard,
+				Details: map[string]string{
+					"component":   "sct_signature",
+					"log_id":      sct.LogID,
+					"hash_algo":   sct.HashAlgo,
+					"description": sct.Reason,
+				},
+			})
+		}
+	}
+
+	// Convert secure renegotiation status to compliance finding (audit fix: issue #4)
+	// Insecure renegotiation (RFC 5746 not supported) enables MitM injection attacks.
+	// This is a protocol-level behavior, not a crypto algorithm.
+	if deep.SecureRenegotiation != nil && deep.SecureRenegotiation.Zone == models.ZoneRed {
+		result.Assets = append(result.Assets, models.CryptoAsset{
+			ID:          fmt.Sprintf("%s:renegotiation", deep.Target),
+			Type:        models.AssetConfig,
+			Algorithm:   "TLS-Renegotiation-Insecure",
+			KeySize:     0,
+			Zone:        models.ZoneRed,
+			Location:    fmt.Sprintf("%s (RFC 5746 secure renegotiation NOT supported)", deep.Target),
+			Criticality: models.CriticalityHVA,
+			Details: map[string]string{
+				"component":   "secure_renegotiation",
+				"method":      deep.SecureRenegotiation.Method,
+				"description": deep.SecureRenegotiation.Reason,
+				"critical":    "true",
+			},
+		})
+	}
+
+	// Convert TLS compression status to compliance finding (audit fix: issue #5)
+	// TLS compression enables the CRIME attack (CVE-2012-4929) — session cookie extraction
+	// via compressed ciphertext oracle. Any server accepting DEFLATE is critically vulnerable.
+	if deep.TLSCompression != nil && deep.TLSCompression.Supported {
+		result.Assets = append(result.Assets, models.CryptoAsset{
+			ID:          fmt.Sprintf("%s:compression", deep.Target),
+			Type:        models.AssetConfig,
+			Algorithm:   "TLS-Compression-CRIME",
+			KeySize:     0,
+			Zone:        models.ZoneRed,
+			Location:    fmt.Sprintf("%s (CRITICAL: TLS compression enabled — CRIME attack CVE-2012-4929)", deep.Target),
+			Criticality: models.CriticalityHVA,
+			Details: map[string]string{
+				"component":   "tls_compression",
+				"method":      deep.TLSCompression.Method,
+				"description": deep.TLSCompression.Reason,
+				"critical":    "true",
+			},
 		})
 	}
 
