@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Go 1.25+ (build only — not needed at runtime)
+- Go 1.26+ (build only — not needed at runtime)
 - Target: Linux amd64/arm64, macOS amd64/arm64, Windows amd64
 
 ## Quick Deploy
