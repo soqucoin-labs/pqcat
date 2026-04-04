@@ -3,6 +3,26 @@
 All notable changes to PQCAT will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.7.1] — 2026-04-04
+
+### Fixed
+
+- **Code Scanner**: OID lookup crash when generating CBOM reports for algorithms with 2-part names (e.g., "AES-256")
+- **Code Scanner**: SHA-1, MD5, DES, and SHA3 Go packages were not detected — 8 new patterns added
+- **Code Scanner**: Python `hashlib` regex missed SHA-1 detection
+- **Code Scanner**: AES key-size misclassification — `aes.NewCipher(key[:16])` was incorrectly reported as AES-256 instead of AES-128
+
+### Added
+
+- **Dynamic Algorithm Resolver** — Pattern engine now uses capture group analysis and line-context inspection to extract actual algorithm variants (AES-128 vs AES-256, SHA-1 vs SHA-256)
+- **Acceptance Test Suite** — 25 persona-based tests covering CISO, Security Analyst, Auditor, Compliance Officer, Program Manager, and Air-Gap Operator workflows
+
+### Changed
+
+- Code patterns: 556 → **564** (8 new Go crypto detection patterns)
+
+---
+
 ## [2.6.3] — 2026-04-02
 
 ### Changed

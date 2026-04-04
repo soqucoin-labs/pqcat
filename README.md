@@ -69,7 +69,7 @@ make
 | SSH | `scan ssh` | Key exchange, host key types |
 | SBOM | `scan sbom` | CycloneDX/SPDX crypto dependency analysis |
 | PKI | `scan pki` | Certificate chain walking and CA analysis |
-| Code | `scan code` | Source code pattern scanning (556 patterns, 39 file types) |
+| Code | `scan code` | Source code pattern scanning (564 patterns, 39 file types) |
 | Config | `scan config` | Configuration file analysis (nginx, Apache, OpenSSL, SSH) for weak crypto settings |
 | HSM/KMS | `scan hsm` | Hardware security module key discovery |
 | SCAP | `scan scap` | SCAP/XCCDF benchmark results for crypto policy compliance |
