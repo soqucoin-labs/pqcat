@@ -17,10 +17,44 @@ import (
 
 // cryptoPattern represents a crypto API usage pattern to scan for.
 type cryptoPattern struct {
-	name       string         // Human-readable name
-	regex      *regexp.Regexp // Compiled pattern
-	algorithms []string       // Algorithms this pattern implies
-	languages  []string       // Languages this pattern applies to
+	name       string                                     // Human-readable name
+	regex      *regexp.Regexp                             // Compiled pattern
+	algorithms []string                                   // Default algorithms (fallback)
+	languages  []string                                   // Languages this pattern applies to
+	resolver   func(match []string, line string) []string // Dynamic algorithm from capture groups + line context
+}
+
+// resolveGoAESKeySize inspects the line containing aes.NewCipher() to infer key size.
+// Go's aes.NewCipher accepts 16 (AES-128), 24 (AES-192), or 32 (AES-256) byte keys.
+// This function checks for common patterns like key[:16], key[:24], key[:32],
+// make([]byte, N), or literal byte slices to determine the actual key size.
+func resolveGoAESKeySize(_ []string, line string) []string {
+	// Check for explicit slice length: key[:16], key[:24], key[:32]
+	if strings.Contains(line, "[:16]") || strings.Contains(line, "[0:16]") {
+		return []string{"AES-128"}
+	}
+	if strings.Contains(line, "[:24]") || strings.Contains(line, "[0:24]") {
+		return []string{"AES-192"}
+	}
+	if strings.Contains(line, "[:32]") || strings.Contains(line, "[0:32]") {
+		return []string{"AES-256"}
+	}
+
+	// Check for make([]byte, N) on the same line
+	makePat := regexp.MustCompile(`make\(\[\]byte,\s*(16|24|32)\)`)
+	if m := makePat.FindStringSubmatch(line); m != nil {
+		switch m[1] {
+		case "16":
+			return []string{"AES-128"}
+		case "24":
+			return []string{"AES-192"}
+		case "32":
+			return []string{"AES-256"}
+		}
+	}
+
+	// Default: can't determine key size, return nil to use fallback (AES-256)
+	return nil
 }
 
 // cryptoPatterns is the knowledge base of crypto API calls to detect.
@@ -34,10 +68,19 @@ var cryptoPatterns = []cryptoPattern{
 	{name: "Go ECDSA Generate", regex: regexp.MustCompile(`ecdsa\.GenerateKey\s*\(`), algorithms: []string{"ECDSA-P256"}, languages: []string{".go"}},
 	{name: "Go Ed25519 Sign", regex: regexp.MustCompile(`ed25519\.(Sign|GenerateKey)\s*\(`), algorithms: []string{"Ed25519"}, languages: []string{".go"}},
 	{name: "Go X25519", regex: regexp.MustCompile(`curve25519\.X25519\s*\(`), algorithms: []string{"X25519"}, languages: []string{".go"}},
-	{name: "Go AES", regex: regexp.MustCompile(`aes\.NewCipher\s*\(`), algorithms: []string{"AES-256"}, languages: []string{".go"}},
+	{name: "Go AES", regex: regexp.MustCompile(`aes\.NewCipher\s*\(`), algorithms: []string{"AES-256"}, languages: []string{".go"},
+		resolver: resolveGoAESKeySize,
+	},
 	{name: "Go AES-GCM", regex: regexp.MustCompile(`cipher\.NewGCM\s*\(`), algorithms: []string{"AES-256-GCM"}, languages: []string{".go"}},
 	{name: "Go SHA-256", regex: regexp.MustCompile(`sha256\.(New|Sum256)\s*\(`), algorithms: []string{"SHA-256"}, languages: []string{".go"}},
 	{name: "Go SHA-512", regex: regexp.MustCompile(`sha512\.(New|Sum512)\s*\(`), algorithms: []string{"SHA-512"}, languages: []string{".go"}},
+	{name: "Go SHA-1", regex: regexp.MustCompile(`sha1\.(New|Sum)\s*\(`), algorithms: []string{"SHA-1"}, languages: []string{".go"}},
+	{name: "Go MD5", regex: regexp.MustCompile(`md5\.(New|Sum)\s*\(`), algorithms: []string{"MD5"}, languages: []string{".go"}},
+	{name: "Go SHA3", regex: regexp.MustCompile(`sha3\.(New256|New384|New512|Sum256|Sum384|Sum512|NewShake128|NewShake256)\s*\(`), algorithms: []string{"SHA3-256"}, languages: []string{".go"}},
+	{name: "Go DES", regex: regexp.MustCompile(`des\.(NewCipher|NewTripleDESCipher)\s*\(`), algorithms: []string{"DES"}, languages: []string{".go"}},
+	{name: "Go crypto/sha1 import", regex: regexp.MustCompile(`"crypto/sha1"`), algorithms: []string{"SHA-1"}, languages: []string{".go"}},
+	{name: "Go crypto/md5 import", regex: regexp.MustCompile(`"crypto/md5"`), algorithms: []string{"MD5"}, languages: []string{".go"}},
+	{name: "Go crypto/des import", regex: regexp.MustCompile(`"crypto/des"`), algorithms: []string{"DES"}, languages: []string{".go"}},
 	{name: "Go TLS Config", regex: regexp.MustCompile(`tls\.(Config|Dial|Listen)`), algorithms: []string{"TLS"}, languages: []string{".go"}},
 	{name: "Go HMAC", regex: regexp.MustCompile(`hmac\.New\s*\(`), algorithms: []string{"HMAC-SHA256"}, languages: []string{".go"}},
 
@@ -49,7 +92,8 @@ var cryptoPatterns = []cryptoPattern{
 	{name: "Python Ed25519", regex: regexp.MustCompile(`Ed25519PrivateKey\.generate\s*\(`), algorithms: []string{"Ed25519"}, languages: []string{".py"}},
 	{name: "Python AES", regex: regexp.MustCompile(`AES\.(new|MODE_GCM|MODE_CBC)`), algorithms: []string{"AES-256"}, languages: []string{".py"}},
 	{name: "Python Fernet", regex: regexp.MustCompile(`Fernet\s*\(`), algorithms: []string{"AES-128-CBC"}, languages: []string{".py"}},
-	{name: "Python hashlib", regex: regexp.MustCompile(`hashlib\.(sha256|sha384|sha512|md5)\s*\(`), algorithms: []string{"SHA-256"}, languages: []string{".py"}},
+	{name: "Python hashlib", regex: regexp.MustCompile(`hashlib\.(sha256|sha384|sha512|sha1|md5)\s*\(`), algorithms: []string{"SHA-256"}, languages: []string{".py"}},
+	{name: "Python hashlib SHA1 explicit", regex: regexp.MustCompile(`hashlib\.sha1\s*\(`), algorithms: []string{"SHA-1"}, languages: []string{".py"}},
 	{name: "Python PBKDF2", regex: regexp.MustCompile(`PBKDF2HMAC\s*\(`), algorithms: []string{"PBKDF2"}, languages: []string{".py"}},
 	{name: "Python PyNaCl", regex: regexp.MustCompile(`nacl\.(signing|public|secret)\b`), algorithms: []string{"Ed25519"}, languages: []string{".py"}},
 
@@ -84,8 +128,25 @@ var cryptoPatterns = []cryptoPattern{
 	{name: "C OpenSSL EVP Verify", regex: regexp.MustCompile(`EVP_DigestVerify(Init|Update|Final)\s*\(`), algorithms: []string{"RSA-2048"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
 	{name: "C OpenSSL EC Key", regex: regexp.MustCompile(`EC_KEY_(new_by_curve_name|generate_key)\s*\(`), algorithms: []string{"ECDSA-P256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
 	{name: "C OpenSSL ECDSA Sign", regex: regexp.MustCompile(`ECDSA_(sign|verify|do_sign|do_verify)\s*\(`), algorithms: []string{"ECDSA-P256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
-	{name: "C OpenSSL EVP AES", regex: regexp.MustCompile(`EVP_aes_(128|256)_(gcm|cbc|ctr|ecb)\s*\(`), algorithms: []string{"AES-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
-	{name: "C OpenSSL EVP SHA", regex: regexp.MustCompile(`EVP_sha(1|256|384|512)\s*\(`), algorithms: []string{"SHA-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C OpenSSL EVP AES", regex: regexp.MustCompile(`EVP_aes_(128|192|256)_(gcm|cbc|ctr|ecb)\s*\(`), algorithms: []string{"AES-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"},
+		resolver: func(m []string, _ string) []string {
+			if len(m) >= 3 {
+				return []string{"AES-" + m[1] + "-" + strings.ToUpper(m[2])}
+			}
+			return nil
+		},
+	},
+	{name: "C OpenSSL EVP SHA", regex: regexp.MustCompile(`EVP_sha(1|256|384|512)\s*\(`), algorithms: []string{"SHA-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"},
+		resolver: func(m []string, _ string) []string {
+			if len(m) >= 2 {
+				if m[1] == "1" {
+					return []string{"SHA-1"}
+				}
+				return []string{"SHA-" + m[1]}
+			}
+			return nil
+		},
+	},
 	{name: "C OpenSSL EVP MD5", regex: regexp.MustCompile(`EVP_md5\s*\(`), algorithms: []string{"MD5"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
 	{name: "C OpenSSL TLS", regex: regexp.MustCompile(`SSL_CTX_new\s*\(`), algorithms: []string{"TLS"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
 	{name: "C OpenSSL EVP PKEY", regex: regexp.MustCompile(`EVP_PKEY_(new|keygen|derive)\s*\(`), algorithms: []string{"RSA-2048"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
@@ -286,7 +347,17 @@ var cryptoPatterns = []cryptoPattern{
 	{name: "Swift CryptoKit HMAC", regex: regexp.MustCompile(`HMAC<SHA(256|384|512)>`), algorithms: []string{"HMAC-SHA256"}, languages: []string{".swift"}},
 	{name: "Swift CryptoKit import", regex: regexp.MustCompile(`import\s+CryptoKit`), algorithms: []string{"ECDSA-P256"}, languages: []string{".swift"}},
 	// CommonCrypto (C-level Apple crypto — older but prevalent)
-	{name: "Apple CC_SHA256", regex: regexp.MustCompile(`\bCC_SHA(1|256|384|512)\s*\(`), algorithms: []string{"SHA-256"}, languages: []string{".c", ".cpp", ".m", ".mm", ".swift"}},
+	{name: "Apple CC_SHA256", regex: regexp.MustCompile(`\bCC_SHA(1|256|384|512)\s*\(`), algorithms: []string{"SHA-256"}, languages: []string{".c", ".cpp", ".m", ".mm", ".swift"},
+		resolver: func(m []string, _ string) []string {
+			if len(m) >= 2 {
+				if m[1] == "1" {
+					return []string{"SHA-1"}
+				}
+				return []string{"SHA-" + m[1]}
+			}
+			return nil
+		},
+	},
 	{name: "Apple CC_SHA256_Init", regex: regexp.MustCompile(`\bCC_SHA(1|256|384|512)_Init\s*\(`), algorithms: []string{"SHA-256"}, languages: []string{".c", ".cpp", ".m", ".mm"}},
 	{name: "Apple CC_SHA256_Update", regex: regexp.MustCompile(`\bCC_SHA(1|256|384|512)_(Update|Final)\s*\(`), algorithms: []string{"SHA-256"}, languages: []string{".c", ".cpp", ".m", ".mm"}},
 	{name: "Apple CCCrypt", regex: regexp.MustCompile(`\bCCCrypt\s*\(`), algorithms: []string{"AES-256"}, languages: []string{".c", ".cpp", ".m", ".mm", ".swift"}},
@@ -1205,8 +1276,15 @@ func scanFileForCrypto(path string) []models.CryptoAsset {
 				continue
 			}
 
-			if pattern.regex.MatchString(line) {
-				for _, algo := range pattern.algorithms {
+			if matches := pattern.regex.FindStringSubmatch(line); matches != nil {
+				// Determine algorithms: use resolver if available, otherwise defaults
+				algos := pattern.algorithms
+				if pattern.resolver != nil {
+					if resolved := pattern.resolver(matches, line); len(resolved) > 0 {
+						algos = resolved
+					}
+				}
+				for _, algo := range algos {
 					zone := classifier.Classify(algo)
 					findingIdx++
 
