@@ -3,6 +3,19 @@
 All notable changes to PQCAT will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.8.0] — 2026-04-15
+
+### Added
+
+- **Zero-Friction Evaluation** — Pro edition now offers a 14-day evaluation license that auto-activates on first run. No registration, no email, no sales call required. 250-asset scan limit with full Pro features.
+- **Code Scanner**: Dynamic algorithm resolver improvements for more accurate AES key-size and hash variant detection
+
+### Changed
+
+- Evaluation asset limit: 100 → **250** (accommodates /24 subnet POCs)
+
+---
+
 ## [2.7.1] — 2026-04-04
 
 ### Fixed
