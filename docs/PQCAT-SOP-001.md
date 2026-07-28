@@ -279,7 +279,7 @@ All configuration fields can be overridden via `PQCAT_` prefixed environment var
 | SSH | `pqcat scan ssh <target>` | Key exchange algorithms, host key types |
 | SBOM | `pqcat scan sbom <path>` | CycloneDX/SPDX bill-of-materials crypto analysis |
 | PKI | `pqcat scan pki <path>` | Certificate chain walking and CA analysis |
-| Code | `pqcat scan code <path>` | Source code scanning for crypto patterns (579 patterns, 39 file types) |
+| Code | `pqcat scan code <path>` | Source code scanning for crypto patterns (564 patterns, 39 file types) |
 | HSM/KMS | `pqcat scan hsm <endpoint>` | Hardware security module key type discovery |
 | CIDR | `pqcat scan cidr <range>` | Network subnet scanning for TLS/SSH endpoints |
 

@@ -36,11 +36,10 @@ No. PQCAT is a self-hosted binary. You download it, run it locally or on your se
 | `ssh` | SSH host keys and key exchange algorithms |
 | `sbom` | CycloneDX/SPDX BOMs for quantum-vulnerable libraries |
 | `pki` | X.509 certificate stores, Java keystores, PEM directories |
-| `code` | Source code for hardcoded keys, weak algorithms (579 patterns, 39+ file types) |
+| `code` | Source code for hardcoded keys, weak algorithms (564 patterns, 39 file types) |
 | `hsm` | HSMs, KMS, and hardware keystores |
-| `cidr` | Subnet-wide discovery of TLS/SSH endpoints |
-| `dns` | DNS DNSSEC and zone signing key algorithms |
-| `vpn` | IPsec/IKE VPN configurations |
+| `scap` | SCAP/OVAL security content for crypto-relevant checks |
+| `config` | Service and application configuration files |
 
 Or just run `pqcat scan target.com` — auto-detection will figure it out.
 
@@ -188,4 +187,4 @@ Email **security@soqu.org** with details. See [SECURITY.md](../SECURITY.md) for 
 
 - **Community:** GitHub Issues, Discord
 - **Enterprise:** labs@soqu.org
-- **Federal:** Contact via SAM.gov (CAGE: 19WH7)
+- **Federal:** labs@soqu.org (Soqucoin Labs Inc. is registered in SAM.gov)

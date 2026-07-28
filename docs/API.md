@@ -89,7 +89,7 @@ API key authentication grants **admin** privileges.
 - `ssh` — SSH key exchange and host key algorithm analysis  
 - `sbom` — CycloneDX/SPDX dependency analysis (180+ library database)
 - `pki` — Certificate authority chain walking
-- `code` — Source code scanning with 579 crypto patterns across 39 file types
+- `code` — Source code scanning with 564 crypto patterns across 39 file types
 - `hsm` — Hardware security module key discovery
 - `cidr` — Subnet-wide TLS/SSH range scanning
 

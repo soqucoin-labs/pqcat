@@ -18,7 +18,7 @@
 #   make clean        Remove build artifacts
 
 BINARY_NAME := pqcat
-VERSION     := 1.1.0
+VERSION     := $(shell cat VERSION 2>/dev/null || echo "dev")
 BUILD_DATE  := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 GIT_COMMIT  := $(shell git rev-parse --short HEAD 2>/dev/null || echo "dev")
 
