@@ -134,7 +134,7 @@ pqcat scan tls agency.gov --confidential --framework fisma
 
 - **Asset Anonymization**: BLAKE2b-salted identifiers replace hostnames and IPs
 - **Aggregate-Only Reporting**: Statistical summaries, zero individual asset detail
-- **zk-STARK Verification**: Cryptographic proof of scan completeness and scoring integrity
+- **Verifiable Score Binding**: Transparent hash-based proof (Merkle commitment + Fiat-Shamir, SHA-384, no trusted setup) that binds a published score to its committed finding set. A holder of the findings can verify the opening; tampering with a finding or the score is detected
 
 ## Security
 

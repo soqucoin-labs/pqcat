@@ -47,7 +47,7 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - **CCE Anonymizer**: TARGET field now uses BLAKE2b hash instead of generic `[ANONYMIZED]` literal — provides referential integrity for regulators
 - **CCE Anonymizer**: Details maps (CERT CN, ISSUER, SAN) now selectively hash location-identifying fields while preserving non-identifying data (algorithm, version, protocol)
 - **CCE Anonymizer**: 30 location-identifying key classifications for comprehensive infrastructure topology protection
-- **zk-STARK Proofs**: Verified full Fiat-Shamir prover integration — auto-generated on every scan with `.proof.json` sidecar output
+- **Compliance Proofs**: Transparent hash-based binding proof (Merkle commitment + Fiat-Shamir, SHA-384) auto-generated on every scan with `.proof.json` sidecar output
 
 ### Documentation
 - **README**: Added Cloud (CSP) and CIDR modules to scanner table (9 → 11 modules)
