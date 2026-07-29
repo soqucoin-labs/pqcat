@@ -26,6 +26,12 @@ const (
 // FetchLiveIntel retrieves threat intelligence from the configured feed URL.
 // Only available in the connected edition (build tag: connected).
 // Returns nil if the fetch fails — caller should fall back to embedded/sidecar.
+//
+// NOTE: this is deliberately NOT wired into LoadThreatIntel's authoritative
+// path. An unauthenticated network feed is an untrusted trust boundary (the
+// same class the sidecar CWD removal closes); making it authoritative requires
+// signed-feed verification against the release key, which is the release-key-
+// gated roadmap item. Until then IntelSourceLive is reserved, not produced.
 func FetchLiveIntel(feedURL string) *IntelResult {
 	if feedURL == "" {
 		feedURL = DefaultIntelFeedURL

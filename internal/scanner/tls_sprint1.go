@@ -511,8 +511,8 @@ const (
 )
 
 // analyzeSCTs parses and classifies Signed Certificate Timestamps for quantum risk.
-// SCT signature classification is uncommon in scanners; the CT ecosystem relies
-// on ECDSA signatures that are quantum-forgeable.
+// PQCAT classifies SCT signatures for quantum vulnerability. The CT
+// ecosystem relies on ECDSA signatures that are quantum-forgeable.
 func analyzeSCTs(rawSCTs [][]byte) *SCTAnalysis {
 	if len(rawSCTs) == 0 {
 		return &SCTAnalysis{

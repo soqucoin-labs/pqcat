@@ -33,21 +33,26 @@ type IntelResult struct {
 // LoadThreatIntel loads threat intelligence using the tiered fallback strategy.
 // Priority: explicit file > sidecar file > embedded data.
 // Live feed is only available in the connected edition (build tag: connected).
-func LoadThreatIntel(explicitPath string) *IntelResult {
-	// Priority 1: Explicit file path (--intel-file flag)
+//
+// An explicit --intel-file that fails to load is a hard error — it does NOT fall
+// through to sidecar auto-discovery, so an operator who pins a feed can never be
+// silently downgraded to a discovered (or embedded) source.
+func LoadThreatIntel(explicitPath string) (*IntelResult, error) {
+	// Priority 1: Explicit file path (--intel-file flag) — fail closed.
 	if explicitPath != "" {
-		if intel, err := loadIntelFile(explicitPath); err == nil {
-			return &IntelResult{
-				Intel:  intel,
-				Source: IntelSourceSidecar,
-				Path:   explicitPath,
-				Age:    intelAge(intel.LastUpdated),
-			}
+		intel, err := loadIntelFile(explicitPath)
+		if err != nil {
+			return nil, fmt.Errorf("could not load --intel-file %s: %w", explicitPath, err)
 		}
-		fmt.Fprintf(os.Stderr, "[intel] Warning: could not load %s, falling back\n", explicitPath)
+		return &IntelResult{
+			Intel:  intel,
+			Source: IntelSourceSidecar,
+			Path:   explicitPath,
+			Age:    intelAge(intel.LastUpdated),
+		}, nil
 	}
 
-	// Priority 2: Sidecar file discovery
+	// Priority 2: Sidecar file discovery (operator-controlled locations only).
 	sidecarPaths := getSidecarPaths()
 	for _, path := range sidecarPaths {
 		if intel, err := loadIntelFile(path); err == nil {
@@ -59,7 +64,7 @@ func LoadThreatIntel(explicitPath string) *IntelResult {
 					Source: IntelSourceSidecar,
 					Path:   path,
 					Age:    intelAge(intel.LastUpdated),
-				}
+				}, nil
 			}
 		}
 	}
@@ -70,25 +75,24 @@ func LoadThreatIntel(explicitPath string) *IntelResult {
 		Intel:  embedded,
 		Source: IntelSourceEmbedded,
 		Age:    intelAge(embedded.LastUpdated),
-	}
+	}, nil
 }
 
-// getSidecarPaths returns the ordered list of paths to check for sidecar intel files.
+// getSidecarPaths returns the ordered list of paths to check for sidecar intel
+// files. The current working directory is intentionally NOT included: it is the
+// directory being scanned (an untrusted trust boundary), so an attacker-authored
+// pqcat-intel.json dropped in a repo must never be auto-discovered. Only
+// operator-controlled locations are searched.
 func getSidecarPaths() []string {
 	var paths []string
 
-	// 1. Current working directory
-	if cwd, err := os.Getwd(); err == nil {
-		paths = append(paths, filepath.Join(cwd, "pqcat-intel.json"))
-	}
-
-	// 2. Same directory as the binary
+	// 1. Same directory as the binary
 	if exe, err := os.Executable(); err == nil {
 		exeDir := filepath.Dir(exe)
 		paths = append(paths, filepath.Join(exeDir, "pqcat-intel.json"))
 	}
 
-	// 3. ~/.pqcat/ config directory
+	// 2. ~/.pqcat/ config directory
 	if home, err := os.UserHomeDir(); err == nil {
 		paths = append(paths,
 			filepath.Join(home, ".pqcat", "pqcat-intel.json"),
@@ -96,7 +100,7 @@ func getSidecarPaths() []string {
 		)
 	}
 
-	// 4. /etc/pqcat/ (system-wide, common in federal deployments)
+	// 3. /etc/pqcat/ (system-wide, common in federal deployments)
 	paths = append(paths, "/etc/pqcat/pqcat-intel.json")
 
 	return paths

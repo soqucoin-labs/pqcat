@@ -302,7 +302,11 @@ func handleScan() {
 
 	// M50: Show threat intel after the scan (not instead of it)
 	if showThreatIntel {
-		intelResult := scanner.LoadThreatIntel(intelFile)
+		intelResult, err := scanner.LoadThreatIntel(intelFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			os.Exit(1)
+		}
 		scanner.PrintIntelSource(intelResult)
 		scanner.PrintThreatIntelTerminal(intelResult.Intel)
 	}

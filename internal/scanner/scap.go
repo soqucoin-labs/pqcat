@@ -94,7 +94,9 @@ var cryptoRulePatterns = []struct {
 	{"xccdf_.*ecdsa", "ECDSA", "ECDSA configuration"},
 	{"xccdf_.*aes", "AES-256", "AES encryption rule"},
 	{"xccdf_.*3des", "3DES", "Triple-DES (deprecated) rule"},
-	{"xccdf_.*des", "DES", "DES (deprecated) rule"},
+	{"_des_", "DES", "DES (deprecated) rule"},
+	{"_des-", "DES", "DES (deprecated) rule"},
+	{"-des_", "DES", "DES (deprecated) rule"},
 	{"xccdf_.*md5", "MD5", "MD5 (deprecated) rule"},
 	{"xccdf_.*sha1", "SHA-1", "SHA-1 (deprecated) rule"},
 	{"xccdf_.*rc4", "RC4", "RC4 (deprecated) rule"},
@@ -185,11 +187,11 @@ func matchCryptoRule(rule xccdfRuleResult, source string) *models.CryptoAsset {
 	cryptoKeywords := []string{
 		"cryptograph", "encrypt", "cipher", "certificate", "tls", "ssl",
 		"ssh", "key management", "pki", "fips", "hash", "signature",
-		"rsa", "ecdsa", "aes", "des", "sha-", "md5",
+		"rsa", "ecdsa", "aes", "3des", "des-cbc", "des-ede", "sha-", "md5",
 	}
 
 	for _, keyword := range cryptoKeywords {
-		if strings.Contains(ruleTitle, keyword) || strings.Contains(ruleID, keyword) {
+		if containsWord(ruleTitle, keyword) || containsWord(ruleID, keyword) {
 			// Infer algorithm from the keyword
 			algo := inferAlgorithmFromKeyword(keyword)
 			return buildSCAPAsset(rule, algo, "Crypto-relevant SCAP finding", source)
@@ -264,4 +266,36 @@ func inferAlgorithmFromKeyword(keyword string) string {
 	default:
 		return "UNKNOWN"
 	}
+}
+
+// containsWord checks if s contains keyword as a substring, with word-boundary
+// awareness for short keywords (<=4 chars) to avoid false positives like
+// "des" matching "described". Longer keywords are unlikely to collide and use
+// simple substring matching.
+func containsWord(s, keyword string) bool {
+	if len(keyword) > 4 {
+		return strings.Contains(s, keyword)
+	}
+	// For short keywords, check that the match is at a word boundary
+	idx := strings.Index(s, keyword)
+	for idx >= 0 {
+		start := idx
+		end := idx + len(keyword)
+		leftOK := start == 0 || !isAlphaNum(s[start-1])
+		rightOK := end >= len(s) || !isAlphaNum(s[end])
+		if leftOK && rightOK {
+			return true
+		}
+		// Search for next occurrence
+		next := strings.Index(s[end:], keyword)
+		if next < 0 {
+			break
+		}
+		idx = end + next
+	}
+	return false
+}
+
+func isAlphaNum(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
 }

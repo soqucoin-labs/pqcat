@@ -260,10 +260,22 @@ func PrintThreatIntelTerminal(intel *ThreatIntel) {
 	}
 	fmt.Println()
 
-	// Risk multiplier
+	// Risk multiplier — informational context only. Per the CCE scoring ruling,
+	// threat intel is never wired into the finalScore; the score is a
+	// deterministic function of the discovered cryptography alone.
 	multiplier := CalculateThreatMultiplier(intel)
-	fmt.Printf("  RISK MULTIPLIER: %.2fx (applied to urgency calculations)\n", multiplier)
+	fmt.Printf("  RISK MULTIPLIER: %.2fx (informational — not applied to the score)\n", multiplier)
 	fmt.Println()
+
+	// Recommended risk adjustments — informational. These are analyst guidance
+	// for prioritising remediation, not inputs to the score.
+	if len(intel.RiskAdjustments) > 0 {
+		fmt.Println("  RECOMMENDED RISK ADJUSTMENTS (informational — not applied to the score)")
+		for _, adj := range intel.RiskAdjustments {
+			fmt.Printf("    • %s: +%.0f%% urgency — %s\n", adj.AlgorithmClass, adj.AdjustmentPct, adj.Reason)
+		}
+		fmt.Println()
+	}
 
 	// Key insights
 	fmt.Println("  KEY INSIGHTS")

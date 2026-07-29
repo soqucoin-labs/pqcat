@@ -236,11 +236,12 @@ func TestClassify_V2_BrokenClassical(t *testing.T) {
 	}
 }
 
-// TestClassify_V2_EVPCrypto verifies EVP-Crypto placeholder is GREEN.
+// TestClassify_V2_EVPCrypto verifies EVP-Crypto placeholder is NOT classified
+// as GREEN — OpenSSL EVP wraps both quantum-safe and quantum-vulnerable algorithms.
 func TestClassify_V2_EVPCrypto(t *testing.T) {
 	zone := Classify("EVP-Crypto")
-	if zone != models.ZoneGreen {
-		t.Errorf("Classify(EVP-Crypto) = %s, want GREEN", zone)
+	if zone == models.ZoneGreen {
+		t.Errorf("Classify(EVP-Crypto) = GREEN, but EVP wraps unsafe algorithms — expected YELLOW or RED")
 	}
 }
 
@@ -252,7 +253,7 @@ func TestClassifyWithReason_V2_Consistency(t *testing.T) {
 		// GREEN
 		"ML-KEM-768", "ML-DSA-65", "SLH-DSA-128S", "LMS",
 		"AES-256", "SHA-256", "HMAC-SHA256", "Bcrypt", "CSPRNG",
-		"ChaCha20", "SipHash", "EVP-Crypto",
+		"ChaCha20", "SipHash",
 		// YELLOW
 		"ML-KEM-512", "HYBRID-RSA",
 		// RED

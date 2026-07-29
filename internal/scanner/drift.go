@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/soqucoin-labs/pqcat/internal/models"
@@ -23,9 +24,14 @@ type DriftReport struct {
 	NewAssets     []DriftAsset  `json:"new_assets"`
 	RemovedAssets []DriftAsset  `json:"removed_assets"`
 	ChangedAssets []DriftChange `json:"changed_assets"`
-	NewRedCount   int           `json:"new_red_count"`
-	ResolvedCount int           `json:"resolved_count"`
-	Summary       string        `json:"summary"`
+	// UnreachableAssets are baseline assets absent from the current scan because
+	// their host was unreachable this run — status UNKNOWN, never counted as
+	// remediated (Wave 3b, ruling Decision 3A).
+	UnreachableAssets []DriftAsset `json:"unreachable_assets,omitempty"`
+	NewRedCount       int          `json:"new_red_count"`
+	ResolvedCount     int          `json:"resolved_count"`
+	UnreachableCount  int          `json:"unreachable_count,omitempty"`
+	Summary           string       `json:"summary"`
 }
 
 // DriftScanMeta holds metadata about a scan for comparison.
@@ -153,14 +159,24 @@ func DetectDrift(baseline *StoredScan, current *models.ScanResult, currentScore 
 		}
 	}
 
-	// Find removed assets (in baseline but not current)
+	// Find assets present in the baseline but absent from the current scan. An
+	// absent asset whose host was unreachable this run is UNKNOWN, not remediated
+	// (Decision 3A); only genuinely-absent assets from reachable hosts are counted
+	// as absent/unverified.
 	for key, asset := range baselineMap {
-		if _, found := currentMap[key]; !found {
-			report.RemovedAssets = append(report.RemovedAssets, DriftAsset{
-				Algorithm: asset.Algorithm,
-				Zone:      string(asset.Zone),
-				Location:  asset.Location,
-			})
+		if _, found := currentMap[key]; found {
+			continue
+		}
+		da := DriftAsset{
+			Algorithm: asset.Algorithm,
+			Zone:      string(asset.Zone),
+			Location:  asset.Location,
+		}
+		if hostUnreachable(asset.Location, current.UnreachableHosts) {
+			report.UnreachableAssets = append(report.UnreachableAssets, da)
+			report.UnreachableCount++
+		} else {
+			report.RemovedAssets = append(report.RemovedAssets, da)
 			if asset.Zone == models.ZoneRed {
 				report.ResolvedCount++
 			}
@@ -191,15 +207,38 @@ func DetectDrift(baseline *StoredScan, current *models.ScanResult, currentScore 
 		}
 	}
 
-	// Summary
-	report.Summary = fmt.Sprintf("Score: %.0f → %.0f (%+.0f, %s). New: %d assets (%d RED). Resolved: %d RED. Changed: %d.",
+	// Summary. Absent assets are reported as ABSENT/UNVERIFIED, not "resolved":
+	// a baseline asset missing from the current scan may have been remediated OR
+	// its host may simply have been unreachable this run (Wave 3b, ruling
+	// Decision 3B). We do not claim remediation without positive evidence.
+	report.Summary = fmt.Sprintf("Score: %.0f → %.0f (%+.0f, %s). New: %d assets (%d RED). Absent (unverified): %d RED. Unreachable: %d. Changed: %d.",
 		baseline.Score.Overall, currentScore.Overall, report.ScoreChange, report.Direction,
-		len(report.NewAssets), report.NewRedCount, report.ResolvedCount, len(report.ChangedAssets))
+		len(report.NewAssets), report.NewRedCount, report.ResolvedCount, report.UnreachableCount, len(report.ChangedAssets))
 
 	return report
 }
 
 // WriteDriftJSON writes a drift report to JSON.
+// hostUnreachable reports whether an asset's location belongs to a host that was
+// unreachable in the current scan. It matches on the full "host:port" and falls
+// back to the host portion so a location and an unreachable-target that differ
+// only in an implicit port still match.
+func hostUnreachable(location string, unreachable []string) bool {
+	for _, u := range unreachable {
+		if u == location || hostPart(u) == hostPart(location) {
+			return true
+		}
+	}
+	return false
+}
+
+func hostPart(s string) string {
+	if i := strings.LastIndex(s, ":"); i > 0 {
+		return s[:i]
+	}
+	return s
+}
+
 func WriteDriftJSON(path string, report *DriftReport) error {
 	f, err := os.Create(path)
 	if err != nil {
@@ -238,8 +277,16 @@ func PrintDriftTerminal(report *DriftReport) {
 	}
 
 	if len(report.RemovedAssets) > 0 {
-		fmt.Printf("  RESOLVED (%d)\n", len(report.RemovedAssets))
+		fmt.Printf("  ABSENT / UNVERIFIED (%d) — not found in current scan; may be remediated (host was reachable)\n", len(report.RemovedAssets))
 		for _, a := range report.RemovedAssets {
+			fmt.Printf("    - [%s] %s  %s\n", a.Zone, a.Algorithm, a.Location)
+		}
+		fmt.Println()
+	}
+
+	if len(report.UnreachableAssets) > 0 {
+		fmt.Printf("  UNREACHABLE / UNKNOWN (%d) — host not reachable this scan; status unknown, NOT counted as remediated\n", len(report.UnreachableAssets))
+		for _, a := range report.UnreachableAssets {
 			fmt.Printf("    - [%s] %s  %s\n", a.Zone, a.Algorithm, a.Location)
 		}
 		fmt.Println()

@@ -25,6 +25,12 @@ type RangeOptions struct {
 	// Timeout per individual host scan.
 	Timeout time.Duration
 
+	// Deep, when true and ScanType is "tls", runs the full deep TLS assessment
+	// (cipher/protocol enumeration + quantum classification) per host instead of
+	// the fast single-probe. This is what makes --deep apply to CIDR ranges; it is
+	// slower, so it is opt-in. Ignored for SSH (no deep SSH equivalent).
+	Deep bool
+
 	// OnProgress is called after each host is scanned.
 	// Args: completed count, total count, current target, result (may be nil on error)
 	OnProgress func(done, total int, target string, result *models.ScanResult)
@@ -82,6 +88,7 @@ func ScanRange(targets []string, opts RangeOptions) (*models.ScanResult, error) 
 	hostsScanned := 0
 	hostsReachable := 0
 	var scanErrors []string
+	var unreachableHosts []string
 
 	for _, host := range hosts {
 		wg.Add(1)
@@ -96,8 +103,22 @@ func ScanRange(targets []string, opts RangeOptions) (*models.ScanResult, error) 
 
 			switch opts.ScanType {
 			case "tls":
-				tlsOpts := TLSScanOptions{Timeout: opts.Timeout}
-				hostResult, scanErr = ScanTLS(target, tlsOpts)
+				if opts.Deep {
+					// Full per-host deep assessment. ScanTLSDeep already returns a
+					// *models.ScanResult (second value), so it drops straight into
+					// the range aggregation path.
+					deepOpts := DefaultDeepTLSOptions()
+					if opts.Port > 0 {
+						deepOpts.Port = fmt.Sprintf("%d", opts.Port)
+					}
+					if opts.Timeout > deepOpts.Timeout {
+						deepOpts.Timeout = opts.Timeout
+					}
+					_, hostResult, scanErr = ScanTLSDeep(target, deepOpts)
+				} else {
+					tlsOpts := TLSScanOptions{Timeout: opts.Timeout}
+					hostResult, scanErr = ScanTLS(target, tlsOpts)
+				}
 			case "ssh":
 				sshOpts := SSHScanOptions{Timeout: opts.Timeout}
 				hostResult, scanErr = ScanSSH(target, sshOpts)
@@ -112,6 +133,7 @@ func ScanRange(targets []string, opts RangeOptions) (*models.ScanResult, error) 
 				result.Assets = append(result.Assets, hostResult.Assets...)
 			} else if scanErr != nil {
 				scanErrors = append(scanErrors, fmt.Sprintf("%s: %v", target, scanErr))
+				unreachableHosts = append(unreachableHosts, target)
 			}
 
 			if opts.OnProgress != nil {
@@ -124,6 +146,7 @@ func ScanRange(targets []string, opts RangeOptions) (*models.ScanResult, error) 
 	wg.Wait()
 
 	result.Duration = time.Since(start)
+	result.UnreachableHosts = unreachableHosts
 
 	// Summary in Details
 	result.Details = map[string]string{
@@ -207,6 +230,18 @@ func expandTargets(targets []string, defaultPort int) ([]string, error) {
 	}
 
 	return hosts, nil
+}
+
+// CountHosts returns the number of individual hosts the given targets expand
+// to, counting each CIDR range as its full host count. The scan path uses this
+// to enforce a license's per-scan asset limit before a range scan runs, so a
+// broad CIDR is rejected up front rather than after the work is done.
+func CountHosts(targets []string) (int, error) {
+	hosts, err := expandTargets(targets, 0)
+	if err != nil {
+		return 0, err
+	}
+	return len(hosts), nil
 }
 
 // formatHostPort wraps an IP string with port, using brackets for IPv6.

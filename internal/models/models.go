@@ -11,6 +11,10 @@ type ScanResult struct {
 	Duration  time.Duration     `json:"duration_ns"`
 	Error     string            `json:"error,omitempty"`
 	Details   map[string]string `json:"details,omitempty"`
+	// UnreachableHosts lists the hosts that errored or timed out this scan (set by
+	// range scans). Drift uses it so an asset absent because its host was down is
+	// reported as UNREACHABLE/unknown, never miscounted as remediated.
+	UnreachableHosts []string `json:"unreachable_hosts,omitempty"`
 }
 
 // CryptoAsset represents a single cryptographic asset discovered during scanning.
@@ -34,7 +38,7 @@ type Zone string
 const (
 	ZoneRed    Zone = "RED"    // Quantum vulnerable — immediate risk
 	ZoneYellow Zone = "YELLOW" // Transitional — hybrid or oversized classical
-	ZoneGreen  Zone = "GREEN"  // CNSA 2.0 compliant
+	ZoneGreen  Zone = "GREEN"  // Quantum-safe: NIST-approved PQC or symmetric/hash resistant (CNSA 2.0 preferred, or acceptable at reduced parameter e.g. AES-128/SHA-256/Falcon)
 )
 
 // AssetType categorizes the cryptographic asset.

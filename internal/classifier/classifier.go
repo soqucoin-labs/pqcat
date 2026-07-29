@@ -11,11 +11,15 @@ import (
 func Classify(algorithm string) models.Zone {
 	alg := strings.ToUpper(strings.TrimSpace(algorithm))
 
-	if isGreen(alg) {
-		return models.ZoneGreen
-	}
+	// Hybrid/transitional is checked BEFORE green: a hybrid such as
+	// "RSA+ML-KEM-768" or "X25519MLKEM768" contains a green PQ name but still
+	// offers a classical, Shor-breakable component, so it is transitional, not
+	// fully quantum-safe (M19). GREEN means no classical KEX/signature remains.
 	if isYellow(alg) {
 		return models.ZoneYellow
+	}
+	if isGreen(alg) {
+		return models.ZoneGreen
 	}
 	if isSymmetricSafe(alg) {
 		return models.ZoneGreen
@@ -27,15 +31,23 @@ func Classify(algorithm string) models.Zone {
 func ClassifyWithReason(algorithm string) (models.Zone, string) {
 	alg := strings.ToUpper(strings.TrimSpace(algorithm))
 
-	if isGreen(alg) {
-		return models.ZoneGreen, "CNSA 2.0 compliant — approved post-quantum algorithm"
-	}
+	// Hybrid/transitional first (M19): a classical+PQ combination is not fully
+	// quantum-safe while the classical half remains negotiable.
 	if isYellow(alg) {
 		return models.ZoneYellow, "Transitional — hybrid or insufficient security level for NSS"
 	}
+	if isGreen(alg) {
+		// M22: keep GREEN, but do not over-claim CNSA 2.0 for algorithms that are
+		// quantum-safe yet not CNSA-preferred. Falcon (FN-DSA) is NIST-standardized
+		// and quantum-safe; CNSA 2.0 simply prefers ML-DSA/SLH-DSA for signatures.
+		if containsAny(alg, []string{"FALCON"}) {
+			return models.ZoneGreen, "Quantum-safe (NIST-standardized FN-DSA/Falcon); CNSA 2.0 prefers ML-DSA/SLH-DSA for signatures"
+		}
+		return models.ZoneGreen, "NIST-approved post-quantum algorithm (CNSA 2.0)"
+	}
 
 	// Check for classically broken or deprecated algorithms
-	if containsAny(alg, []string{"MD5", "SHA-1", "DES", "3DES", "RC4", "BLOWFISH"}) {
+	if containsAny(alg, []string{"MD2", "MD4", "MD5", "SHA-0", "SHA0", "SHA-1", "SHA1", "DES", "3DES", "RC2", "RC4", "BLOWFISH"}) {
 		return models.ZoneRed, "Classically broken or deprecated — prohibited by all modern standards"
 	}
 	if containsAny(alg, []string{"RIPEMD"}) {
@@ -84,8 +96,24 @@ func isGreen(alg string) bool {
 
 // isYellow checks if the algorithm is transitional (hybrid or Level 1 only).
 func isYellow(alg string) bool {
-	// Hybrid combinations
-	if strings.Contains(alg, "+") || strings.Contains(alg, "HYBRID") {
+	// Explicit hybrid markers. A '+' counts as a hybrid separator only when it sits
+	// BETWEEN two components (e.g. "RSA+ML-KEM-768"); a trailing '+' is part of a
+	// name like "SPHINCS+" (legacy SLH-DSA) and must not read as hybrid.
+	if i := strings.Index(alg, "+"); i > 0 && i < len(alg)-1 {
+		return true
+	}
+	if strings.Contains(alg, "HYBRID") {
+		return true
+	}
+
+	// Implicit hybrid: a PQ algorithm named together with a classical asymmetric
+	// one, even without a '+' (e.g. the TLS group "X25519MLKEM768"). While the
+	// classical half is negotiable it is still Shor-breakable attack surface, so
+	// this is transitional, not fully quantum-safe (M19; matches the M38 GREEN
+	// definition on the scanner/remediation surfaces).
+	classical := []string{"X25519", "X448", "RSA", "ECDH", "ECDSA", "SECP", "P-256", "P-384", "P-521", "CURVE25519", "ED25519", "DH-"}
+	pq := []string{"ML-KEM", "MLKEM", "KYBER", "ML-DSA", "MLDSA", "DILITHIUM", "SLH-DSA", "SPHINCS", "FALCON"}
+	if containsAny(alg, classical) && containsAny(alg, pq) {
 		return true
 	}
 
@@ -108,13 +136,19 @@ func isSymmetricSafe(alg string) bool {
 	asymmetricPrefixes := []string{
 		"ECDSA", "RSA", "ECDH", "ED25519", "ED448", "DSA", "DH-",
 		"SCHNORR", "SECP256K1", "X25519", "X448", "CURVE25519",
+		// Classical asymmetric encryption/KEM schemes — Shor-breakable key
+		// establishment. Without these, names like "ECIES-AES-256-GCM" or
+		// "ElGamal/AES-256" ride the AES-256 substring to a false GREEN (M21).
+		"ECIES", "ELGAMAL", "PAILLIER", "RABIN", "CRAMER-SHOUP", "GOLDWASSER",
 	}
 	if containsAny(alg, asymmetricPrefixes) {
 		return false
 	}
 
-	// Reject classically broken algorithms and deprecated protocols
-	brokenAlgorithms := []string{"MD5", "SHA-1", "DES", "3DES", "RC4", "BLOWFISH", "RIPEMD", "TLS-1.0", "TLS-1.1", "SSL-3.0", "SSL-2.0"}
+	// Reject classically broken algorithms and deprecated protocols. "SHA1"
+	// (dashless) is listed alongside "SHA-1" so MAC/composite names like
+	// "HMAC-SHA1" are caught rather than riding the "HMAC" safe substring (M20).
+	brokenAlgorithms := []string{"MD2", "MD4", "MD5", "SHA-0", "SHA0", "SHA-1", "SHA1", "DES", "3DES", "RC2", "RC4", "BLOWFISH", "RIPEMD", "TLS-1.0", "TLS-1.1", "SSL-3.0", "SSL-2.0"}
 	if containsAny(alg, brokenAlgorithms) {
 		return false
 	}
@@ -133,8 +167,9 @@ func isSymmetricSafe(alg string) bool {
 		"BCRYPT", "ARGON2", "SCRYPT", "PBKDF2",
 		// Cryptographically Secure PRNGs — quantum resistant
 		"CSPRNG",
-		// EVP placeholder — assume mixed, classify safe until specific
-		"EVP-CRYPTO",
+		// NOTE: EVP-CRYPTO intentionally excluded — OpenSSL EVP wraps both
+		// quantum-safe and quantum-vulnerable algorithms. Unresolved EVP
+		// usage must classify as YELLOW (unknown), not GREEN.
 	}
 	return containsAny(alg, safeAlgorithms)
 }

@@ -48,7 +48,10 @@ func TestCalculateThreatMultiplier(t *testing.T) {
 
 // TestLoadThreatIntel_FallbackToEmbedded verifies fallback works.
 func TestLoadThreatIntel_FallbackToEmbedded(t *testing.T) {
-	result := LoadThreatIntel("")
+	result, err := LoadThreatIntel("")
+	if err != nil {
+		t.Fatalf("LoadThreatIntel(\"\"): %v", err)
+	}
 	if result == nil {
 		t.Fatal("LoadThreatIntel returned nil")
 	}
@@ -71,7 +74,10 @@ func TestLoadThreatIntel_ExplicitFile(t *testing.T) {
 		t.Fatalf("Failed to write test intel: %v", err)
 	}
 
-	result := LoadThreatIntel(path)
+	result, err := LoadThreatIntel(path)
+	if err != nil {
+		t.Fatalf("LoadThreatIntel(%s): %v", path, err)
+	}
 	if result.Source != IntelSourceSidecar {
 		t.Errorf("Expected SIDECAR source, got %s", result.Source)
 	}
@@ -80,11 +86,17 @@ func TestLoadThreatIntel_ExplicitFile(t *testing.T) {
 	}
 }
 
-// TestLoadThreatIntel_InvalidFile verifies graceful fallback on bad file.
-func TestLoadThreatIntel_InvalidFile(t *testing.T) {
-	result := LoadThreatIntel("/nonexistent/path.json")
-	if result.Source != IntelSourceEmbedded {
-		t.Errorf("Expected EMBEDDED fallback, got %s", result.Source)
+// TestLoadThreatIntel_ExplicitFileFailsClosed verifies that an explicit
+// --intel-file that cannot be loaded is a hard error — it must NOT silently
+// fall back to sidecar auto-discovery or embedded data (M04). An operator who
+// pins a feed can never be downgraded without noticing.
+func TestLoadThreatIntel_ExplicitFileFailsClosed(t *testing.T) {
+	result, err := LoadThreatIntel("/nonexistent/path.json")
+	if err == nil {
+		t.Fatal("expected an error for an unreadable --intel-file, got nil (fell open)")
+	}
+	if result != nil {
+		t.Errorf("expected nil result on hard error, got source %s", result.Source)
 	}
 }
 
