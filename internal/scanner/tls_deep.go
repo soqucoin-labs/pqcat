@@ -163,9 +163,9 @@ func ScanTLSDeep(target string, opts DeepTLSScanOptions) (*DeepTLSResult, *model
 	}
 
 	// ── Phase 7e: SCT signature analysis (Blindspot 4) ──
-	// UNPRECEDENTED: No scanner classifies Signed Certificate Timestamp
-	// signatures for quantum risk. The entire CT ecosystem relies on ECDSA
-	// signatures that are quantum-forgeable.
+	// SCT signature analysis (Blindspot 4): classify Signed Certificate
+	// Timestamp signatures for quantum risk. The CT ecosystem relies on
+	// ECDSA signatures that are quantum-forgeable.
 	result.SCTAnalysis = analyzeSCTs(state.SignedCertificateTimestamps)
 
 	// ── Phase 7f: Certificate HNDL exposure windows (Blindspot 7) ──

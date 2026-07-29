@@ -9,7 +9,7 @@
 //  7. CAA record analysis (Blindspot 12) — DNS authorization
 //
 // These are LOW-effort, HIGH-impact fixes that close competitive gaps with
-// SSL Labs and open unprecedented PQ-specific assessment capabilities.
+// SSL Labs and add PQ-specific assessment capabilities.
 package scanner
 
 import (
@@ -421,8 +421,8 @@ type OCSPAnalysis struct {
 }
 
 // analyzeOCSPStaple parses and classifies the OCSP stapled response for quantum risk.
-// This is unprecedented — SSL Labs shows stapling status (yes/no) but does NOT
-// classify the signature algorithm for quantum vulnerability.
+// PQCAT classifies the OCSP signature algorithm for quantum vulnerability;
+// SSL Labs shows stapling status (yes/no) but does not assess the signature.
 func analyzeOCSPStaple(ocspResponse []byte, issuer *x509.Certificate) *OCSPAnalysis {
 	if len(ocspResponse) == 0 {
 		return &OCSPAnalysis{
