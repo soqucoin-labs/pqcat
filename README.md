@@ -22,12 +22,13 @@ pqcat scan tls agency.gov --framework fisma --html report.html --save-db
 | Feature | Enclave (Air-Gapped) | Pro (Connected) |
 |---|---|---|
 | CLI scanner (11 modules + auto-detect) | ✓ | ✓ |
-| TUI terminal dashboard | ✓ | ✓ |
-| Self-contained HTML reports (with TOC) | ✓ | ✓ |
-| SQLite scan history & comparison | ✓ | ✓ |
 | Shell completions (bash/zsh/fish) | ✓ | ✓ |
 | System health check (`pqcat doctor`) | ✓ | ✓ |
-| Self-update (`pqcat self-update`) | ✓ | ✓ |
+| JSON / plain-text output | ✓ | ✓ |
+| TUI terminal dashboard | — | ✓ |
+| Self-contained HTML reports (with TOC) | — | ✓ |
+| SQLite scan history & comparison | — | ✓ |
+| Self-update (`pqcat self-update`) | — | ✓ |
 | REST API + web dashboard | — | ✓ |
 | 4 persona views (CISO/Auditor/CIO/Exec) | — | ✓ |
 | Notification center | — | ✓ |
@@ -40,7 +41,7 @@ pqcat scan tls agency.gov --framework fisma --html report.html --save-db
 | Confidential Compliance Engine (CCE) | — | ✓ |
 | Section 508 / WCAG 2.1 AA accessible | — | ✓ |
 
-Both editions are built from this codebase. The Enclave edition compiles with **zero network code** beyond scan targets — guaranteed by the compiler.
+Both editions are built from this codebase. The Enclave edition compiles with **zero network code** beyond scan targets — guaranteed by the compiler. Features marked Pro require the proprietary compliance engine (pre-built binaries from [GitHub Releases](https://github.com/soqucoin-labs/pqcat/releases)).
 
 ## Quick Start
 
@@ -93,7 +94,7 @@ make linux-amd64  # Cross-compile for Linux x86_64
 
 ## TLS Deep Scan
 
-PQCAT's deep scan mode provides **SSL Labs-grade TLS assessment** with quantum-risk classification — in a single binary, air-gap safe, 90x faster.
+PQCAT's deep scan mode provides **SSL Labs-grade TLS assessment** with quantum-risk classification in a single binary, air-gap safe.
 
 ```bash
 # Deep scan (default for single targets)
