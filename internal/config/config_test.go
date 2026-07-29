@@ -18,8 +18,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Workers != 20 {
 		t.Errorf("Expected default workers 20, got %d", cfg.Workers)
 	}
-	if cfg.Database.Path != "pqcat.db" {
-		t.Errorf("Expected default DB path 'pqcat.db', got '%s'", cfg.Database.Path)
+	expectedDB := defaultDatabasePath()
+	if cfg.Database.Path != expectedDB {
+		t.Errorf("Expected default DB path '%s', got '%s'", expectedDB, cfg.Database.Path)
 	}
 	if cfg.Server.Listen != "localhost:8443" {
 		t.Errorf("Expected default server listen 'localhost:8443', got '%s'", cfg.Server.Listen)

@@ -121,6 +121,8 @@ func handleScan() {
 	outputFile := ""
 	sbomFormat := scanner.FormatAuto
 	workers := 20
+	showThreatIntel := false
+	var intelFile string
 
 	i := 3
 	for i < len(os.Args) {
@@ -152,16 +154,12 @@ func handleScan() {
 				i++
 			}
 		case "--threatintel":
-			// Supported in scanner
-			intelFile := ""
+			// M50: Set flag and let scan proceed; print intel after scan
+			showThreatIntel = true
 			if i+1 < len(os.Args) && !strings.HasPrefix(os.Args[i+1], "--") {
 				intelFile = os.Args[i+1]
 				i++
 			}
-			intelResult := scanner.LoadThreatIntel(intelFile)
-			scanner.PrintIntelSource(intelResult)
-			scanner.PrintThreatIntelTerminal(intelResult.Intel)
-			return
 		case "--framework", "--pdf", "--html", "--ato", "--siem", "--siem-format",
 			"--vendor", "--briefing", "--baseline", "--save-baseline", "--watch",
 			"--save-db", "--data-retention", "--q-day-year", "--environment",
@@ -169,6 +167,12 @@ func handleScan() {
 			fmt.Fprintf(os.Stderr, "Option %s requires PQCAT Pro edition.\n", os.Args[i])
 			fmt.Fprintln(os.Stderr, "Download: https://github.com/soqucoin-labs/pqcat/releases")
 			os.Exit(1)
+		default:
+			// M51: Catch unknown flags and stray args instead of ignoring them
+			if strings.HasPrefix(os.Args[i], "--") {
+				fmt.Fprintf(os.Stderr, "Unknown option: %s\nRun 'pqcat scan --help' for usage.\n", os.Args[i])
+				os.Exit(1)
+			}
 		}
 		i++
 	}
@@ -262,8 +266,14 @@ func handleScan() {
 		opts.ScanHSM = true
 		fmt.Fprintf(os.Stderr, "  Running aggregate scan across all modules...\n")
 		result, err = scanner.ScanAggregate(opts)
+	case "config":
+		if len(expandedTargets) == 0 {
+			fmt.Fprintln(os.Stderr, "Error: config scan requires a target file or directory")
+			os.Exit(1)
+		}
+		result, err = scanner.ScanConfig(expandedTargets[0])
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown scan type: %s (valid: tls, ssh, sbom, pki, code, hsm, scap, all)\n", scanType)
+		fmt.Fprintf(os.Stderr, "Unknown scan type: %s (valid: tls, ssh, sbom, pki, code, hsm, scap, config, all)\n", scanType)
 		os.Exit(1)
 	}
 
@@ -288,6 +298,13 @@ func handleScan() {
 		fmt.Println(string(data))
 	} else {
 		printTerminal(result)
+	}
+
+	// M50: Show threat intel after the scan (not instead of it)
+	if showThreatIntel {
+		intelResult := scanner.LoadThreatIntel(intelFile)
+		scanner.PrintIntelSource(intelResult)
+		scanner.PrintThreatIntelTerminal(intelResult.Intel)
 	}
 }
 

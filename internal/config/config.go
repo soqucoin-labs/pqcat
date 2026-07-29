@@ -186,12 +186,22 @@ func DefaultConfig() *Config {
 			SSHPorts: []int{22},
 		},
 		Database: DatabaseConfig{
-			Path: "pqcat.db",
+			Path: defaultDatabasePath(),
 		},
 		Server: ServerConfig{
 			Listen: "localhost:8443",
 		},
 	}
+}
+
+// defaultDatabasePath returns ~/.pqcat/pqcat.db, falling back to "pqcat.db" if
+// the home directory cannot be determined.
+func defaultDatabasePath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "pqcat.db"
+	}
+	return filepath.Join(home, ".pqcat", "pqcat.db")
 }
 
 // Load reads configuration from the precedence chain and returns a merged Config.
