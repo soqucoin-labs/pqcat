@@ -194,7 +194,9 @@ func DefaultConfig() *Config {
 	}
 }
 
-// defaultDatabasePath returns ~/.pqcat/pqcat.db, falling back to "pqcat.db" if
+// defaultDatabasePath returns ~/.pqcat/pqcat.db. A relative default breaks
+// Finder/double-click launches (cwd is /) and litters pqcat.db into whatever
+// directory the CLI happens to run from. Falls back to ./pqcat.db only if
 // the home directory cannot be determined.
 func defaultDatabasePath() string {
 	home, err := os.UserHomeDir()
@@ -440,7 +442,7 @@ func GenerateTemplate(path string) error {
 	}
 
 	template := fmt.Sprintf(`# PQCAT Configuration
-# Soqucoin Labs Inc. — Post-Quantum Compliance Assessment Tool
+# Soqucoin Labs Inc. — Post-Quantum Cryptography Compliance Assessment Tool
 #
 # Precedence: CLI flags > env vars > ./pqcat.yaml > ~/.pqcat/config.yaml > /etc/pqcat/pqcat.yaml
 # Environment variables: PQCAT_FRAMEWORK, PQCAT_WORKERS, PQCAT_OUTPUT_DIR, PQCAT_DB_PATH, etc.
@@ -462,7 +464,7 @@ report_format: json        # json, pdf, html
 # SIEM integration
 siem:
   format: cef              # splunk, elk, cef
-  endpoint: "syslog://siem.agency.mil:514"
+  endpoint: "syslog://siem.example.com:514"
   # token: "your-splunk-hec-token"  # Uncomment for Splunk HEC
 
 # Threat intelligence

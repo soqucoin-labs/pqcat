@@ -104,16 +104,27 @@ func ScanAggregate(opts AggregateOptions) (*models.ScanResult, error) {
 
 	// ── SSH Scans ──
 	for _, target := range opts.NetworkTargets {
-		if strings.Contains(target, "/") {
-			continue // skip CIDR for SSH — already handled by TLS range scan
-		}
 		progress("ssh", fmt.Sprintf("Scanning %s...", target))
 		scanCount++
+
+		if strings.Contains(target, "/") {
+			// CIDR range — the TLS range scan only covers TLS, so SSH must be
+			// swept here too or CIDR targets get zero SSH coverage.
+			rangeOpts := DefaultRangeOptions("ssh")
+			rangeOpts.Concurrency = opts.Workers
+			result, err := ScanRange([]string{target}, rangeOpts)
+			if err != nil {
+				scanErrors = append(scanErrors, fmt.Sprintf("SSH %s: %v", target, err))
+				continue
+			}
+			combined.Assets = append(combined.Assets, result.Assets...)
+			continue
+		}
 
 		sshOpts := DefaultSSHOptions()
 		result, err := ScanSSH(target, sshOpts)
 		if err != nil {
-			// SSH may not be running — not an error for aggregate
+			// SSH may not be running on a single host — not an error for aggregate
 			continue
 		}
 		combined.Assets = append(combined.Assets, result.Assets...)

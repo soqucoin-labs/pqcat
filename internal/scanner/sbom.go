@@ -341,6 +341,7 @@ type cycloneDXBOM struct {
 
 type cycloneDXComponent struct {
 	Type    string `json:"type"`
+	BOMRef  string `json:"bom-ref,omitempty"`
 	Name    string `json:"name"`
 	Version string `json:"version"`
 	Purl    string `json:"purl,omitempty"`
@@ -474,6 +475,7 @@ func parseCycloneDXFull(data []byte) ([]componentInfo, []cycloneDXDep, error) {
 			version: c.Version,
 			purl:    c.Purl,
 			group:   c.Group,
+			bomRef:  c.BOMRef,
 		})
 	}
 	return components, bom.Dependencies, nil
@@ -511,6 +513,7 @@ type componentInfo struct {
 	version string
 	purl    string
 	group   string
+	bomRef  string // CycloneDX bom-ref for dependency graph keying
 }
 
 // detectFormat auto-detects the SBOM format from JSON content.

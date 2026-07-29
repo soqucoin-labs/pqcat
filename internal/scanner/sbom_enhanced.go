@@ -255,11 +255,15 @@ func FindTransitiveCryptoDeps(components []componentInfo, deps []cycloneDXDep) [
 		graph[d.Ref] = d.DependsOn
 	}
 
-	// Build name→ref lookup from components
+	// Build name→ref lookup from components.
+	// Use bom-ref as primary key (CycloneDX), fall back to purl, then name.
 	nameToRef := make(map[string]string)
 	refToName := make(map[string]string)
 	for _, c := range components {
-		ref := c.purl
+		ref := c.bomRef
+		if ref == "" {
+			ref = c.purl
+		}
 		if ref == "" {
 			ref = c.name
 		}

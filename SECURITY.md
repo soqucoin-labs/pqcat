@@ -4,9 +4,8 @@
 
 | Version | Supported |
 |---|---|
-| 2.7.x | ✅ Active |
-| 2.6.x | ✅ Security fixes only |
-| < 2.6 | ❌ Upgrade required |
+| 1.1.x | ✅ Active |
+| 1.0.x | ✅ Active |
 
 ## Reporting a Vulnerability
 

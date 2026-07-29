@@ -12,29 +12,40 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
 	"github.com/soqucoin-labs/pqcat/internal/models"
 )
 
-func init() {
-	// Wire new config file names into isConfigFile() via package-level registration
-	additionalConfigFiles = append(additionalConfigFiles,
-		"haproxy.cfg",
-		"crypto-policies", "config", "state", // RHEL crypto-policies files
-		"crypto-config.yaml", "msp", // Hyperledger Fabric
-	)
+// Config file registration is now handled by the package-level
+// additionalConfigFilesExact and additionalConfigFilesContains slices.
+
+// additionalConfigFilesExact are matched by exact basename only.
+// Short/generic names that would false-positive on substring matching.
+var additionalConfigFilesExact = []string{
+	"config", "state", "msp",
 }
 
-// additionalConfigFiles is populated by init() to extend isConfigFile().
-var additionalConfigFiles []string
+// additionalConfigFilesContains are distinctive enough for substring matching.
+var additionalConfigFilesContains = []string{
+	"haproxy.cfg",
+	"crypto-policies",
+	"crypto-config.yaml",
+}
 
 // isAdditionalConfigFile checks against the extended config file list.
+// Short/generic names use exact basename match; distinctive names use substring.
 func isAdditionalConfigFile(name string) bool {
-	lower := strings.ToLower(name)
-	for _, f := range additionalConfigFiles {
-		if lower == f || strings.Contains(lower, f) {
+	lower := strings.ToLower(filepath.Base(name))
+	for _, f := range additionalConfigFilesExact {
+		if lower == f {
+			return true
+		}
+	}
+	for _, f := range additionalConfigFilesContains {
+		if strings.Contains(lower, f) {
 			return true
 		}
 	}

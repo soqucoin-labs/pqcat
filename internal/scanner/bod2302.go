@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"strings"
 	"time"
 
@@ -105,7 +106,7 @@ func mapAssetToBOD2302(asset models.CryptoAsset, result models.ScanResult, agenc
 		Port:             extractPort(result.Target, result.ScanType),
 		Protocol:         mapScanTypeToProtocol(result.ScanType),
 		Service:          mapScanTypeToService(result.ScanType),
-		IsInternetFacing: true, // PQCAT scans network-reachable targets
+		IsInternetFacing: isNetworkReachableScanType(result.ScanType), // only tls/ssh/pki reach a network host; code/sbom/config/hsm/scap/image do not
 		AgencyComponent:  agency,
 		DiscoveryDate:    result.Timestamp.UTC().Format(time.RFC3339),
 		LastSeenDate:     now,
@@ -156,11 +157,29 @@ func extractHostname(target string) string {
 	return target
 }
 
-// extractIP returns the IP address portion, or the hostname if not an IP.
+// extractIP returns the IP address portion of the target, or empty when the
+// target is a hostname or a non-network path (so hostnames and code-scan paths
+// never land in the BOD 23-02 IP Address column).
 func extractIP(target string) string {
 	host := extractHostname(target)
-	// If it looks like an IP, return it; otherwise empty (DNS-only target)
-	return host
+	if net.ParseIP(host) != nil {
+		return host
+	}
+	return ""
+}
+
+// isNetworkReachableScanType reports whether a scan type actually probes a
+// network-reachable host — the BOD 23-02 internet-facing predicate. Filesystem
+// and artifact scans (code/sbom/config/hsm/scap/image) are not internet-facing.
+func isNetworkReachableScanType(scanType string) bool {
+	switch {
+	case strings.HasPrefix(scanType, "tls"), strings.HasPrefix(scanType, "ssh"):
+		return true
+	case scanType == "pki":
+		return true
+	default:
+		return false
+	}
 }
 
 // extractPort pulls the port from a target string.

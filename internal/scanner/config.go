@@ -166,7 +166,8 @@ func parseJavaSecurity(path string) ([]models.CryptoAsset, error) {
 
 		// Handle continuation lines
 		if currentKey != "" {
-			currentValue += " " + line
+			cleanLine := strings.TrimSuffix(line, "\\")
+			currentValue += " " + strings.TrimSpace(cleanLine)
 			if !strings.HasSuffix(line, "\\") {
 				// Process accumulated value
 				assets = append(assets, processJavaProperty(path, lineNum, currentKey, currentValue)...)
@@ -179,14 +180,14 @@ func parseJavaSecurity(path string) ([]models.CryptoAsset, error) {
 		// Check for known properties
 		if m := javaDisabledRe.FindStringSubmatch(line); m != nil {
 			currentKey = "jdk.tls.disabledAlgorithms"
-			currentValue = m[1]
+			currentValue = strings.TrimSuffix(strings.TrimSpace(m[1]), "\\")
 			if !strings.HasSuffix(line, "\\") {
 				assets = append(assets, processJavaProperty(path, lineNum, currentKey, currentValue)...)
 				currentKey = ""
 			}
 		} else if m := javaLegacyRe.FindStringSubmatch(line); m != nil {
 			currentKey = "jdk.tls.legacyAlgorithms"
-			currentValue = m[1]
+			currentValue = strings.TrimSuffix(strings.TrimSpace(m[1]), "\\")
 			if !strings.HasSuffix(line, "\\") {
 				assets = append(assets, processJavaProperty(path, lineNum, currentKey, currentValue)...)
 				currentKey = ""
@@ -430,10 +431,23 @@ func parseApacheSSL(path string) ([]models.CryptoAsset, error) {
 	content := string(data)
 	var assets []models.CryptoAsset
 
-	if m := apacheProtocolRe.FindStringSubmatch(content); m != nil {
+	// Parse ALL SSLProtocol directives (not just the first)
+	for _, m := range apacheProtocolRe.FindAllStringSubmatch(content, -1) {
 		for _, proto := range strings.Fields(m[1]) {
+			// In Apache, "-" means disabled — skip it entirely
+			if strings.HasPrefix(proto, "-") {
+				continue
+			}
 			proto = strings.TrimPrefix(proto, "+")
-			proto = strings.TrimPrefix(proto, "-")
+
+			// Expand "all" per Apache semantics
+			if strings.EqualFold(proto, "all") {
+				// "all" = all protocols; typically combined with -SSLv3 etc.
+				// Don't emit a generic "all" asset — the individual disabled
+				// tokens are already skipped above
+				continue
+			}
+
 			assets = append(assets, models.CryptoAsset{
 				Algorithm: proto,
 				Location:  path,

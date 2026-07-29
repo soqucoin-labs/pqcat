@@ -251,6 +251,18 @@ func ScanTLSDeep(target string, opts DeepTLSScanOptions) (*DeepTLSResult, *model
 		}
 	}
 
+	// ── Phase 9a: Correct TLS 1.3 cipher suite KEX after group probing ──
+	// TLS 1.3 cipher suites were classified with hardcoded "X25519/P-256"
+	// KEX because the cipher suite name doesn't include the key exchange.
+	// Now that we know the actual negotiated groups, update them.
+	if result.PQKeyExchangeDetected && result.PQKeyExchangeGroup != "" {
+		for i := range result.CipherSuites {
+			if result.CipherSuites[i].KeyExchange == "X25519/P-256 (TLS 1.3)" {
+				result.CipherSuites[i].KeyExchange = fmt.Sprintf("%s (TLS 1.3 PQ-hybrid)", result.PQKeyExchangeGroup)
+			}
+		}
+	}
+
 	// ── Phase 9b: Quantum summary and remediation (moved from Phase 8) ──
 	// Runs AFTER key exchange probing so QuantumSummary includes ML-KEM
 	// and other key exchange groups in zone counts. Fixes audit issue #1.

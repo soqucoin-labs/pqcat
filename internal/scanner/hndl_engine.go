@@ -73,6 +73,14 @@ func GetHNDLProfile(framework string) HNDLProfile {
 	return hndlFrameworkProfiles["cnsa2"] // Default: CNSA 2.0
 }
 
+// IsValidHNDLFramework reports whether framework has a defined HNDL profile.
+// Callers that accept a user-supplied framework should validate with this and
+// reject unknowns rather than letting GetHNDLProfile silently default to CNSA 2.0.
+func IsValidHNDLFramework(framework string) bool {
+	_, ok := hndlFrameworkProfiles[strings.ToLower(strings.TrimSpace(framework))]
+	return ok
+}
+
 // ListHNDLFrameworks returns all available framework identifiers.
 func ListHNDLFrameworks() []string {
 	keys := make([]string, 0, len(hndlFrameworkProfiles))
@@ -311,17 +319,14 @@ func CalculateHNDLRisk(input HNDLEngineInput) *HNDLEngineResult {
 	// ── Per-Asset Risk Breakdown ─────────────────────────────────────────
 	// Patent: PQCAT-P002 claim 2 — Per-asset HNDL exposure window
 	for _, asset := range input.Assets {
+		// HNDL exposure window is driven by how long the DATA stays sensitive
+		// (retention), NOT by certificate expiry (Wave 3b, ruling Decision 2).
+		// A 90-day cert protecting 25-year data still has a 25-year HNDL window,
+		// so the previous "cap by cert expiry" — which collapsed the window to ~0
+		// for normal short-lived certs — is removed.
 		assetWindow := profile.RetentionDays - daysUntilQuantum
 		if assetWindow < 0 {
 			assetWindow = 0
-		}
-
-		// If asset has its own expiry, use the shorter of expiry vs retention
-		if asset.ExpiryDays >= 0 && asset.ExpiryDays < profile.RetentionDays {
-			assetWindow = asset.ExpiryDays - daysUntilQuantum
-			if assetWindow < 0 {
-				assetWindow = 0
-			}
 		}
 
 		risk := "NONE"

@@ -27,7 +27,7 @@ import (
 
 func init() {
 	// Wire Envoy/Istio config file names into the scanner
-	additionalConfigFiles = append(additionalConfigFiles,
+	additionalConfigFilesContains = append(additionalConfigFilesContains,
 		"envoy.yaml", "envoy.yml", "envoy.json",
 		"bootstrap.yaml", "bootstrap.yml",
 		"front-envoy.yaml",

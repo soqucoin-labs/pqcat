@@ -18,9 +18,13 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Workers != 20 {
 		t.Errorf("Expected default workers 20, got %d", cfg.Workers)
 	}
-	expectedDB := defaultDatabasePath()
-	if cfg.Database.Path != expectedDB {
-		t.Errorf("Expected default DB path '%s', got '%s'", expectedDB, cfg.Database.Path)
+	// Default DB path is absolute (~/.pqcat/pqcat.db): a relative default
+	// breaks Finder-launched apps and litters pqcat.db into random cwds.
+	if home, err := os.UserHomeDir(); err == nil {
+		want := filepath.Join(home, ".pqcat", "pqcat.db")
+		if cfg.Database.Path != want {
+			t.Errorf("Expected default DB path '%s', got '%s'", want, cfg.Database.Path)
+		}
 	}
 	if cfg.Server.Listen != "localhost:8443" {
 		t.Errorf("Expected default server listen 'localhost:8443', got '%s'", cfg.Server.Listen)

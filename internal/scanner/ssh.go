@@ -9,6 +9,11 @@ import (
 	"github.com/soqucoin-labs/pqcat/internal/classifier"
 	"github.com/soqucoin-labs/pqcat/internal/models"
 	"golang.org/x/crypto/ssh"
+
+	"crypto/dsa"
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/rsa"
 )
 
 // SSHScanOptions configures SSH scanning.
@@ -123,24 +128,26 @@ func normalizeSSHAlgo(sshType string) string {
 	return sshType
 }
 
-// keyBitSize attempts to determine the key size from an SSH public key.
+// keyBitSize determines the key size from an SSH public key.
 func keyBitSize(key ssh.PublicKey) int {
 	// CryptoPublicKey interface exposes the underlying crypto key
 	if cpk, ok := key.(ssh.CryptoPublicKey); ok {
 		switch k := cpk.CryptoPublicKey().(type) {
-		case interface {
-			N() interface{ BitLen() int }
-		}:
-			return k.N().BitLen()
-		default:
-			_ = k
+		case *rsa.PublicKey:
+			return k.N.BitLen()
+		case *ecdsa.PublicKey:
+			return k.Curve.Params().BitSize
+		case ed25519.PublicKey:
+			return 256
+		case *dsa.PublicKey:
+			return k.P.BitLen()
 		}
 	}
 
-	// Fallback based on type
+	// Fallback based on type (only for non-standard key types)
 	switch key.Type() {
 	case "ssh-rsa", "rsa-sha2-256", "rsa-sha2-512":
-		return 2048 // Conservative default
+		return 2048 // Conservative default when CryptoPublicKey unavailable
 	case "ssh-ed25519":
 		return 256
 	case "ecdsa-sha2-nistp256":

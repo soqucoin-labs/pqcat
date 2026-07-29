@@ -82,7 +82,7 @@ var cryptoPatterns = []cryptoPattern{
 	{name: "Go crypto/md5 import", regex: regexp.MustCompile(`"crypto/md5"`), algorithms: []string{"MD5"}, languages: []string{".go"}},
 	{name: "Go crypto/des import", regex: regexp.MustCompile(`"crypto/des"`), algorithms: []string{"DES"}, languages: []string{".go"}},
 	{name: "Go TLS Config", regex: regexp.MustCompile(`tls\.(Config|Dial|Listen)`), algorithms: []string{"TLS"}, languages: []string{".go"}},
-	{name: "Go HMAC", regex: regexp.MustCompile(`hmac\.New\s*\(`), algorithms: []string{"HMAC-SHA256"}, languages: []string{".go"}},
+	{name: "Go HMAC", regex: regexp.MustCompile(`hmac\.New\s*\(`), algorithms: []string{"HMAC"}, languages: []string{".go"}},
 
 	// ═══════════════════════════════════════════════════════════════════
 	// Python Crypto APIs
@@ -108,7 +108,7 @@ var cryptoPatterns = []cryptoPattern{
 	{name: "Java KeyGenerator AES", regex: regexp.MustCompile(`KeyGenerator\.getInstance\s*\(\s*"AES"`), algorithms: []string{"AES-256"}, languages: []string{".java"}},
 	{name: "Java MessageDigest", regex: regexp.MustCompile(`MessageDigest\.getInstance\s*\(\s*"SHA-(256|384|512)"`), algorithms: []string{"SHA-256"}, languages: []string{".java"}},
 	{name: "Java SSLContext", regex: regexp.MustCompile(`SSLContext\.getInstance\s*\(`), algorithms: []string{"TLS"}, languages: []string{".java"}},
-	{name: "Java Mac HMAC", regex: regexp.MustCompile(`Mac\.getInstance\s*\(\s*"Hmac`), algorithms: []string{"HMAC-SHA256"}, languages: []string{".java"}},
+	{name: "Java Mac HMAC", regex: regexp.MustCompile(`Mac\.getInstance\s*\(\s*"Hmac`), algorithms: []string{"HMAC"}, languages: []string{".java"}},
 
 	// ═══════════════════════════════════════════════════════════════════
 	// JavaScript / TypeScript Crypto APIs
@@ -162,8 +162,8 @@ var cryptoPatterns = []cryptoPattern{
 	{name: "C Raw SHA256 oneshot", regex: regexp.MustCompile(`SHA256\s*\([^)]*,[^)]*,[^)]*\)`), algorithms: []string{"SHA-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
 	{name: "C Raw SHA512 oneshot", regex: regexp.MustCompile(`SHA512\s*\([^)]*,[^)]*,[^)]*\)`), algorithms: []string{"SHA-512"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
 	{name: "C Raw AES encrypt", regex: regexp.MustCompile(`AES_(set_encrypt_key|set_decrypt_key|encrypt|cbc_encrypt)\s*\(`), algorithms: []string{"AES-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
-	{name: "C Raw HMAC", regex: regexp.MustCompile(`HMAC\s*\(\s*EVP_`), algorithms: []string{"HMAC-SHA256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
-	{name: "C Raw HMAC CTX", regex: regexp.MustCompile(`HMAC_CTX_(new|init|update|final)\s*\(`), algorithms: []string{"HMAC-SHA256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C Raw HMAC", regex: regexp.MustCompile(`HMAC\s*\(\s*EVP_`), algorithms: []string{"HMAC"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C Raw HMAC CTX", regex: regexp.MustCompile(`HMAC_CTX_(new|init|update|final)\s*\(`), algorithms: []string{"HMAC"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
 	{name: "C Raw RIPEMD160", regex: regexp.MustCompile(`RIPEMD160_(Init|Update|Final)\s*\(`), algorithms: []string{"RIPEMD-160"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
 
 	// ═══════════════════════════════════════════════════════════════════
@@ -205,7 +205,7 @@ var cryptoPatterns = []cryptoPattern{
 	{name: "C include openssl/ec", regex: regexp.MustCompile(`#include\s*[<"]openssl/ec\.h[>"]`), algorithms: []string{"ECDSA-P256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
 	{name: "C include openssl/ecdsa", regex: regexp.MustCompile(`#include\s*[<"]openssl/ecdsa\.h[>"]`), algorithms: []string{"ECDSA-P256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
 	{name: "C include openssl/aes", regex: regexp.MustCompile(`#include\s*[<"]openssl/aes\.h[>"]`), algorithms: []string{"AES-256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
-	{name: "C include openssl/hmac", regex: regexp.MustCompile(`#include\s*[<"]openssl/hmac\.h[>"]`), algorithms: []string{"HMAC-SHA256"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
+	{name: "C include openssl/hmac", regex: regexp.MustCompile(`#include\s*[<"]openssl/hmac\.h[>"]`), algorithms: []string{"HMAC"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
 	{name: "C include openssl/ripemd", regex: regexp.MustCompile(`#include\s*[<"]openssl/ripemd\.h[>"]`), algorithms: []string{"RIPEMD-160"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
 	{name: "C include openssl/dh", regex: regexp.MustCompile(`#include\s*[<"]openssl/dh\.h[>"]`), algorithms: []string{"DH-2048"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
 	{name: "C include openssl/evp", regex: regexp.MustCompile(`#include\s*[<"]openssl/evp\.h[>"]`), algorithms: []string{"EVP-Crypto"}, languages: []string{".c", ".cpp", ".h", ".hpp"}},
@@ -501,7 +501,7 @@ var cryptoPatterns = []cryptoPattern{
 	{name: "Config Apache SSLCertificateFile", regex: regexp.MustCompile(`SSLCertificate(Key)?File\s+`), algorithms: []string{"RSA-2048"}, languages: []string{".conf", ".cfg"}},
 	// sshd_config
 	{name: "Config sshd Ciphers", regex: regexp.MustCompile(`^Ciphers\s+`), algorithms: []string{"AES-256"}, languages: []string{".conf", ".cfg", ".ini"}},
-	{name: "Config sshd MACs", regex: regexp.MustCompile(`^MACs\s+`), algorithms: []string{"HMAC-SHA256"}, languages: []string{".conf", ".cfg", ".ini"}},
+	{name: "Config sshd MACs", regex: regexp.MustCompile(`^MACs\s+`), algorithms: []string{"HMAC"}, languages: []string{".conf", ".cfg", ".ini"}},
 	{name: "Config sshd KexAlgorithms", regex: regexp.MustCompile(`^KexAlgorithms\s+`), algorithms: []string{"ECDH-P256"}, languages: []string{".conf", ".cfg", ".ini"}},
 	{name: "Config sshd HostKeyAlgorithms", regex: regexp.MustCompile(`^HostKeyAlgorithms\s+`), algorithms: []string{"RSA-2048"}, languages: []string{".conf", ".cfg", ".ini"}},
 	{name: "Config sshd PubkeyAcceptedAlgorithms", regex: regexp.MustCompile(`^PubkeyAccepted(Algorithms|KeyTypes)\s+`), algorithms: []string{"RSA-2048"}, languages: []string{".conf", ".cfg", ".ini"}},
@@ -578,7 +578,7 @@ var cryptoPatterns = []cryptoPattern{
 	{name: "Kotlin KeyGenParameterSpec", regex: regexp.MustCompile(`KeyGenParameterSpec\.Builder\s*\(`), algorithms: []string{"RSA-2048"}, languages: []string{".kt", ".kts", ".java"}},
 	{name: "Kotlin KeyProperties PURPOSE", regex: regexp.MustCompile(`KeyProperties\.(PURPOSE_ENCRYPT|PURPOSE_DECRYPT|PURPOSE_SIGN|PURPOSE_VERIFY)`), algorithms: []string{"RSA-2048"}, languages: []string{".kt", ".kts", ".java"}},
 	{name: "Kotlin Cipher getInstance", regex: regexp.MustCompile(`Cipher\.getInstance\s*\(\s*"(RSA|AES|DES|DESede|Blowfish)[/"]`), algorithms: []string{"RSA-2048"}, languages: []string{".kt", ".kts", ".java"}},
-	{name: "Kotlin Mac getInstance", regex: regexp.MustCompile(`Mac\.getInstance\s*\(\s*"Hmac(SHA256|SHA384|SHA512|SHA1|MD5)"\s*\)`), algorithms: []string{"HMAC-SHA256"}, languages: []string{".kt", ".kts", ".java"}},
+	{name: "Kotlin Mac getInstance", regex: regexp.MustCompile(`Mac\.getInstance\s*\(\s*"Hmac(SHA256|SHA384|SHA512|SHA1|MD5)"\s*\)`), algorithms: []string{"HMAC"}, languages: []string{".kt", ".kts", ".java"}},
 	{name: "Kotlin MessageDigest getInstance", regex: regexp.MustCompile(`MessageDigest\.getInstance\s*\(\s*"(SHA-256|SHA-384|SHA-512|SHA-1|MD5)"\s*\)`), algorithms: []string{"SHA-256"}, languages: []string{".kt", ".kts", ".java"}},
 	{name: "Kotlin KeyPairGenerator getInstance", regex: regexp.MustCompile(`KeyPairGenerator\.getInstance\s*\(\s*"(RSA|EC|DSA|DH)"\s*\)`), algorithms: []string{"RSA-2048"}, languages: []string{".kt", ".kts", ".java"}},
 	{name: "Kotlin KeyAgreement getInstance", regex: regexp.MustCompile(`KeyAgreement\.getInstance\s*\(\s*"(ECDH|DH|X25519)"\s*\)`), algorithms: []string{"ECDH-P256"}, languages: []string{".kt", ".kts", ".java"}},
@@ -958,11 +958,13 @@ var codeExtensions = map[string]bool{
 	".dockerfile": true,
 }
 
-// Directories to skip.
+// Directories to skip. Only clearly non-source directories.
+// NOTE: 'pkg' deliberately excluded — Go's standard layout uses pkg/ for
+// library source. 'build'/'target' kept as they are typically build outputs.
 var skipDirs = map[string]bool{
 	"node_modules": true, "vendor": true, ".git": true, "__pycache__": true,
 	"target": true, "build": true, "dist": true, ".idea": true, ".vscode": true,
-	"bin": true, "obj": true, "pkg": true,
+	"bin": true, "obj": true,
 }
 
 // ScanCode scans source code files for cryptographic API usage.
@@ -982,8 +984,9 @@ func ScanCode(target string) (*models.ScanResult, error) {
 	}
 
 	var files []string
+	suppressedByIgnore := 0
 	if info.IsDir() {
-		files, err = findCodeFiles(target)
+		files, suppressedByIgnore, err = findCodeFiles(target)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan directory: %w", err)
 		}
@@ -1031,14 +1034,19 @@ func ScanCode(target string) (*models.ScanResult, error) {
 		"files_with_crypto": fmt.Sprintf("%d", filesWithCrypto),
 		"total_findings":    fmt.Sprintf("%d", totalFindings),
 	}
+	if suppressedByIgnore > 0 {
+		result.Details["files_suppressed_by_pqcatignore"] = fmt.Sprintf("%d", suppressedByIgnore)
+	}
 
 	return result, nil
 }
 
 // findCodeFiles recursively finds source code files, skipping common non-source dirs.
 // Supports .pqcatignore for custom exclusion patterns (POL-09).
-func findCodeFiles(dir string) ([]string, error) {
+// Returns the found files and the number of files suppressed by .pqcatignore.
+func findCodeFiles(dir string) ([]string, int, error) {
 	var files []string
+	suppressedCount := 0
 
 	// POL-09: Load .pqcatignore patterns
 	ignorePatterns := loadPqcatIgnore(dir)
@@ -1059,6 +1067,7 @@ func findCodeFiles(dir string) ([]string, error) {
 		// POL-09: Check .pqcatignore patterns
 		relPath, _ := filepath.Rel(dir, path)
 		if matchesIgnorePattern(relPath, ignorePatterns) {
+			suppressedCount++
 			return nil
 		}
 
@@ -1075,7 +1084,7 @@ func findCodeFiles(dir string) ([]string, error) {
 		return nil
 	})
 
-	return files, err
+	return files, suppressedCount, err
 }
 
 // loadPqcatIgnore reads .pqcatignore patterns from the target directory and parents.
