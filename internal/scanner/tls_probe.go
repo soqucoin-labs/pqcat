@@ -1,7 +1,7 @@
 // tls_probe.go implements raw TCP-level probing for legacy SSL protocols
 // that Go's crypto/tls library does not support (SSLv3, SSLv2).
 //
-// RATIONALE (Casey's concern): If a customer has a rare SSLv3 endpoint and
+// RATIONALE: If a customer has a rare SSLv3 endpoint and
 // PQCAT doesn't detect it, they may certify as "PQC compliant" while retaining
 // a quantum-vulnerable legacy component. This creates liability exposure.
 // By crafting raw ClientHello messages, we can detect SSLv3/SSLv2 without
