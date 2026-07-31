@@ -56,6 +56,7 @@ const (
 	AssetCodeCrypto AssetType = "code_crypto_call"
 	AssetHSMModule  AssetType = "hsm_module"
 	AssetConfig     AssetType = "config_setting"
+	AssetFirmware   AssetType = "firmware_artifact"
 )
 
 // Criticality represents the importance of an asset.
