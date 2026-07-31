@@ -106,7 +106,7 @@ Both editions are built from the same codebase using Go build tags. The Enclave 
 
 | Component | License | Source |
 |---|---|---|
-| Scanner modules (7) | Apache 2.0 | Open source — `github.com/soqucoin-labs/pqcat` |
+| Scanner modules (11) | Apache 2.0 | Open source — `github.com/soqucoin-labs/pqcat` |
 | Algorithm classifier | Apache 2.0 | Open source — `github.com/soqucoin-labs/pqcat` |
 | Data models | Apache 2.0 | Open source — `github.com/soqucoin-labs/pqcat` |
 | Config loader | Apache 2.0 | Open source — `github.com/soqucoin-labs/pqcat` |
@@ -133,7 +133,7 @@ Both editions are built from the same codebase using Go build tags. The Enclave 
 ```bash
 # Download release binary from GitHub Releases
 # https://github.com/soqucoin-labs/pqcat/releases
-curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v2.0.1/pqcat-linux-amd64
+curl -LO https://github.com/soqucoin-labs/pqcat/releases/download/v2.10.0/pqcat-linux-amd64
 chmod +x pqcat-linux-amd64
 mv pqcat-linux-amd64 /usr/local/bin/pqcat
 
@@ -541,10 +541,10 @@ PQCAT generates its own CycloneDX SBOM via `make sbom`:
 
 ```bash
 make sbom
-# Generates pqcat-v2.0.1.cdx.json
+# Generates pqcat-v2.10.0.cdx.json
 
 # Self-scan PQCAT's own dependencies
-pqcat scan sbom pqcat-v2.0.1.cdx.json --framework nist
+pqcat scan sbom pqcat-v2.10.0.cdx.json --framework nist
 ```
 
 ## 13. Security Considerations
@@ -862,22 +862,22 @@ stateDiagram-v2
 
 **API Route Registration:**
 
-| Route | Handler | Method | Min Role |
+| Route | Purpose | Method | Min Role |
 |---|---|---|---|
-| `/` | `dashboardHandler` | GET | (none — login required in SPA) |
-| `/api/health` | `healthHandler` | GET | (none) |
-| `/api/auth/login` | `handleAuthLogin` | POST | (none) |
-| `/api/auth/logout` | `handleAuthLogout` | POST | (any) |
-| `/api/auth/me` | `handleAuthMe` | GET | (any) |
-| `/api/auth/password` | `handleAuthChangePassword` | POST | (any) |
-| `/api/stats` | `handleStats` | GET | viewer |
-| `/api/scans` | `handleScans` | GET | viewer |
-| `/api/scan` | `handleScan` | POST | analyst |
-| `/api/scans/{id}` | `handleScanDetail` | GET | viewer |
-| `/api/users` | `handleUsers` | GET/POST/PUT/DELETE | admin |
-| `/api/audit-log` | `handleAuditLog` | GET | admin |
-| `/api/audit-log/verify` | `handleAuditVerify` | GET | admin |
-| `/metrics` | `handleMetrics` | GET | admin |
+| `/` | Dashboard SPA | GET | (none — login required in SPA) |
+| `/api/health` | Health check | GET | (none) |
+| `/api/auth/login` | Session login | POST | (none) |
+| `/api/auth/logout` | Session logout | POST | (any) |
+| `/api/auth/me` | Current user info | GET | (any) |
+| `/api/auth/password` | Change password | POST | (any) |
+| `/api/stats` | Dashboard statistics | GET | viewer |
+| `/api/scans` | List scans | GET | viewer |
+| `/api/scan` | Start scan | POST | analyst |
+| `/api/scans/{id}` | Scan detail | GET | viewer |
+| `/api/users` | User management | GET/POST/PUT/DELETE | admin |
+| `/api/audit-log` | Audit log | GET | admin |
+| `/api/audit-log/verify` | Verify audit chain | GET | admin |
+| `/metrics` | Prometheus metrics | GET | admin |
 
 > **Note:** All API endpoints require authentication via session token or API key. Only `/api/health` and `/api/auth/login` are unauthenticated.
 

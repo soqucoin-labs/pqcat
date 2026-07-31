@@ -3,6 +3,42 @@
 All notable changes to PQCAT will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.10.0] — 2026-07-31
+
+### Added
+
+- **`scan firmware`** — the 11th scanner module. Carves DER/PEM certificates, UEFI signature-list GUIDs, NIST PQC algorithm identifiers, and OpenSSH keys from firmware images (UEFI capsules, SPI flash dumps, router images). `--emit-xray-manifest` auto-builds the xray manifest.
+- **`excavate`** — read-only firmware acquisition. x86 via flashrom/chipsec; Raspberry Pi/ARM via the `bootloader` region; embedded flash via `mtd`. `--dry-run` previews the exact commands.
+- **`xray placard`** — booth/rack-ready HTML placard for a hardware attestation.
+- **Pro dashboard evidence suite** — Evidence tab mints Challenge Coins, shows the Harvest Clock, and carves uploaded firmware into an xray manifest. Migration simulator calls the real engine.
+- **`--json`** on the verify family (coin, disclose, xray, remediate, verify) with shared verdict shape and `0/1/2` exit codes for air-gapped CI gating.
+
+### Changed
+
+- Reports: unified zone vocabulary (Quantum-Vulnerable / Transitional / Quantum-Safe) across all outputs; schema-valid RFC-4122 UUIDs in CBOM and OSCAL exports.
+- Dashboard: role-gated write actions; keyboard-navigable sidebar; build version in masthead.
+
+### Security
+
+- XSS hardening: all dashboard server-string sinks escaped; scans with zero findings now fail closed instead of rendering empty state.
+
+---
+
+## [2.9.0] — 2026-07-30
+
+### Added
+
+- **Verifiable Evidence Command Suite** — Seven new commands turn the CCE proof layer into artifacts a skeptic can verify offline, on their own machine, with no trust in the operator. Every artifact fails closed on any tampering.
+- **`coin` / `coin verify`** — Challenge Coin: portable evidence file bundling a transparent binding proof (SHA-384 Merkle + Fiat-Shamir transcript), witness, and ML-DSA-44 origin seal.
+- **`kiosk`** — renders a coin as a self-contained HTML placard with verdict, zone counts, verification fingerprints, and QR code.
+- **`disclose commit|open|verify`** — graduated selective disclosure with per-class subsalts under a single root.
+- **`remediate prove|verify`** — cryptographic before/after remediation transaction sealed under ML-DSA-44.
+- **`harvest`** — backward-looking HNDL exposure clock with per-channel asset-years integral.
+- **`xray commit|attest|verify`** — hardware-rooted verdict binding firmware regions to post-quantum classification.
+- **`sealkey generate|show`** — persistent ML-DSA-44 prover identity with `PQCAT_TRUSTED_SEAL_KEYS` pinning.
+
+---
+
 ## [2.8.0] — 2026-04-15
 
 ### Added

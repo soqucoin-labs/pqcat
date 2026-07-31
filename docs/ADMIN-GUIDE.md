@@ -387,4 +387,4 @@ Branded reports include:
 
 ---
 
-*PQCAT Pro v2.7.0 — Soqucoin Labs Inc.*
+*PQCAT Pro v2.10.0 — Soqucoin Labs Inc.*
