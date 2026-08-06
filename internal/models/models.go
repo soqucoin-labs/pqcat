@@ -120,7 +120,7 @@ type Report struct {
 	ScoringVersion   string            `json:"scoring_version"`             // CCE: "1.0", "1.1-hndl" (GAP-02)
 	EngineVersion    string            `json:"engine_version"`              // CCE: PQCAT binary version
 	Environment      string            `json:"environment,omitempty"`       // CCE: production/staging/dev (UX-BLIND-03)
-	RetentionSource  string            `json:"retention_source,omitempty"`  // CCE: "user_provided"/"policy_file" (GAP-04)
+	RetentionSource  string            `json:"retention_source,omitempty"`  // CCE: "user_provided"/"config_file"/"policy_file" (GAP-04)
 	ScanCoverage     float64           `json:"scan_coverage,omitempty"`     // CCE: reachable/attempted (GAP-03)
 	Disclaimer       string            `json:"disclaimer"`                  // CCE: legal disclaimer (GAP-07)
 	ProofHash        string            `json:"proof_hash,omitempty"`        // Phase 2: SHA-384 of ZK proof

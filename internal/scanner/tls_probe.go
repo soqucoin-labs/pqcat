@@ -21,6 +21,7 @@
 package scanner
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"net"
@@ -32,8 +33,8 @@ import (
 // probeSSLv3 checks if the server accepts SSL 3.0 connections.
 // SSL 3.0 is vulnerable to POODLE (CVE-2014-3566) and uses algorithms
 // that are universally quantum-vulnerable.
-func probeSSLv3(host, port string, timeout time.Duration, result *DeepTLSResult) {
-	supported := probeRawTLS(host, port, timeout, 0x0300, sslv3CipherSuites())
+func probeSSLv3(ctx context.Context, host, port string, timeout time.Duration, result *DeepTLSResult) {
+	supported := probeRawTLS(ctx, host, port, timeout, 0x0300, sslv3CipherSuites())
 
 	if supported {
 		result.Protocols["ssl_3_0"] = &ProtocolResult{
@@ -53,8 +54,8 @@ func probeSSLv3(host, port string, timeout time.Duration, result *DeepTLSResult)
 // probeSSLv2 checks if the server accepts SSL 2.0 connections.
 // SSL 2.0 uses a fundamentally different record format than SSL 3.0+.
 // Any server supporting SSLv2 is severely misconfigured.
-func probeSSLv2(host, port string, timeout time.Duration, result *DeepTLSResult) {
-	supported := probeRawSSLv2(host, port, timeout)
+func probeSSLv2(ctx context.Context, host, port string, timeout time.Duration, result *DeepTLSResult) {
+	supported := probeRawSSLv2(ctx, host, port, timeout)
 
 	if supported {
 		result.Protocols["ssl_2_0"] = &ProtocolResult{
@@ -77,9 +78,9 @@ func probeSSLv2(host, port string, timeout time.Duration, result *DeepTLSResult)
 
 // probeRawTLS sends a crafted ClientHello at the specified protocol version
 // and returns true if the server responds with a ServerHello.
-func probeRawTLS(host, port string, timeout time.Duration, version uint16, suites []uint16) bool {
+func probeRawTLS(ctx context.Context, host, port string, timeout time.Duration, version uint16, suites []uint16) bool {
 	addr := net.JoinHostPort(host, port)
-	conn, err := net.DialTimeout("tcp", addr, timeout)
+	conn, err := dialContext(ctx, "tcp", addr, timeout)
 	if err != nil {
 		return false
 	}
@@ -328,9 +329,9 @@ func buildECPointFormatsExtension() []byte {
 
 // probeRawSSLv2 uses the SSLv2 record format to detect SSLv2 support.
 // SSLv2 ClientHello has a fundamentally different format from SSLv3+.
-func probeRawSSLv2(host, port string, timeout time.Duration) bool {
+func probeRawSSLv2(ctx context.Context, host, port string, timeout time.Duration) bool {
 	addr := net.JoinHostPort(host, port)
-	conn, err := net.DialTimeout("tcp", addr, timeout)
+	conn, err := dialContext(ctx, "tcp", addr, timeout)
 	if err != nil {
 		return false
 	}
@@ -489,7 +490,7 @@ func goDroppedCipherSuites() []goDroppedSuite {
 // probeGoDroppedSuites uses raw TCP ClientHello probes to detect cipher suites
 // that Go's crypto/tls library no longer supports. Results are classified through
 // the standard classifyCipherSuite() pipeline and appended to the deep result.
-func probeGoDroppedSuites(host, port string, opts DeepTLSScanOptions, result *DeepTLSResult) {
+func probeGoDroppedSuites(ctx context.Context, host, port string, opts DeepTLSScanOptions, result *DeepTLSResult) {
 	// Build a set of suite IDs already discovered by Go's TLS library
 	alreadyFound := make(map[uint16]bool)
 	for _, cs := range result.CipherSuites {
@@ -502,7 +503,7 @@ func probeGoDroppedSuites(host, port string, opts DeepTLSScanOptions, result *De
 		}
 
 		// Probe at TLS 1.2 using raw ClientHello
-		supported := probeRawTLS(host, port, opts.Timeout, 0x0303, []uint16{suite.ID})
+		supported := probeRawTLS(ctx, host, port, opts.Timeout, 0x0303, []uint16{suite.ID})
 		if supported {
 			csr := classifyCipherSuite(suite.ID, suite.Name, 0x0303) // 0x0303 = TLS 1.2
 			result.CipherSuites = append(result.CipherSuites, csr)

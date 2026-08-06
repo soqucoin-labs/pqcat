@@ -16,6 +16,7 @@ package scanner
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,7 +28,7 @@ import (
 )
 
 // ScanConfig analyzes cryptographic configuration files.
-func ScanConfig(target string) (*models.ScanResult, error) {
+func ScanConfig(ctx context.Context, target string) (*models.ScanResult, error) {
 	result := &models.ScanResult{
 		Target:    target,
 		ScanType:  "config",

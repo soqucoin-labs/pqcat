@@ -13,6 +13,7 @@
 package scanner
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/binary"
@@ -109,7 +110,7 @@ func exportNullCipherSuites() []struct {
 
 // probeExportNullSuites probes for export-grade, NULL, and anonymous cipher suites.
 // ANY acceptance is a CRITICAL finding that should immediately fail compliance.
-func probeExportNullSuites(host, port string, timeout time.Duration) *ExportNullProbeResult {
+func probeExportNullSuites(ctx context.Context, host, port string, timeout time.Duration) *ExportNullProbeResult {
 	result := &ExportNullProbeResult{}
 
 	for _, suite := range exportNullCipherSuites() {
@@ -118,7 +119,7 @@ func probeExportNullSuites(host, port string, timeout time.Duration) *ExportNull
 			continue
 		}
 
-		supported := probeRawTLS(host, port, timeout, 0x0301, []uint16{suite.id})
+		supported := probeRawTLS(ctx, host, port, timeout, 0x0301, []uint16{suite.id})
 
 		suiteResult := ExportNullSuiteResult{
 			ID:        suite.id,
@@ -169,9 +170,9 @@ type TLSCompressionResult struct {
 //
 // Method: Send a ClientHello offering compression method 0x01 (DEFLATE) in
 // addition to 0x00 (null). If the ServerHello selects 0x01, compression is enabled.
-func probeTLSCompression(host, port string, timeout time.Duration) *TLSCompressionResult {
+func probeTLSCompression(ctx context.Context, host, port string, timeout time.Duration) *TLSCompressionResult {
 	addr := net.JoinHostPort(host, port)
-	conn, err := net.DialTimeout("tcp", addr, timeout)
+	conn, err := dialContext(ctx, "tcp", addr, timeout)
 	if err != nil {
 		return &TLSCompressionResult{
 			Supported: false,

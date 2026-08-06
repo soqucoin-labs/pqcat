@@ -3,6 +3,7 @@ package scanner
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -968,7 +969,7 @@ var skipDirs = map[string]bool{
 }
 
 // ScanCode scans source code files for cryptographic API usage.
-func ScanCode(target string) (*models.ScanResult, error) {
+func ScanCode(ctx context.Context, target string) (*models.ScanResult, error) {
 	start := time.Now()
 
 	result := &models.ScanResult{

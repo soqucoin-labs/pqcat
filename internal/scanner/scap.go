@@ -6,6 +6,7 @@
 package scanner
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
 	"os"
@@ -104,7 +105,7 @@ var cryptoRulePatterns = []struct {
 
 // ScanSCAP parses an OpenSCAP XCCDF or ARF result XML file and
 // extracts crypto-relevant findings as PQCAT assets.
-func ScanSCAP(path string) (*models.ScanResult, error) {
+func ScanSCAP(ctx context.Context, path string) (*models.ScanResult, error) {
 	start := time.Now()
 
 	data, err := os.ReadFile(path)

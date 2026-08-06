@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"net"
@@ -51,7 +52,7 @@ type sshKEXINIT struct {
 // ScanSSHDeep performs a comprehensive SSH security assessment by directly
 // parsing the SSH_MSG_KEXINIT packet from the server. This captures ALL
 // algorithms the server supports — not just the one Go's SSH library negotiates.
-func ScanSSHDeep(target string, opts SSHScanOptions) (*DeepSSHResult, *models.ScanResult, error) {
+func ScanSSHDeep(ctx context.Context, target string, opts SSHScanOptions) (*DeepSSHResult, *models.ScanResult, error) {
 	start := time.Now()
 
 	host, port := parseTarget(target, opts.Port)
@@ -69,7 +70,7 @@ func ScanSSHDeep(target string, opts SSHScanOptions) (*DeepSSHResult, *models.Sc
 	}
 
 	// Phase 1: Raw TCP connection to capture banner and KEXINIT
-	conn, err := net.DialTimeout("tcp", addr, opts.Timeout)
+	conn, err := dialContext(ctx, "tcp", addr, opts.Timeout)
 	if err != nil {
 		result.Duration = time.Since(start)
 		result.Error = fmt.Sprintf("connection failed: %v", err)

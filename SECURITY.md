@@ -32,7 +32,7 @@ If you discover a security vulnerability in PQCAT, please report it responsibly:
 PQCAT is designed with federal deployment in mind:
 
 ### Enclave Edition (Air-Gapped)
-- **Zero outbound network code** — compiler-enforced via Go build tags
+- **Nothing listens** — no HTTP server, no API, no dashboard in the Enclave binary, enforced by Go build tags and checkable with `go tool nm pqcat | grep 'http.(*Server)'`
 - **No CGO**: Pure Go, no C dependencies, no shared library loading
 - **Static Binary**: Single executable, no runtime dependencies
 - **Database**: SQLite (pure Go driver), portable across air gaps
@@ -54,6 +54,43 @@ PQCAT is designed with federal deployment in mind:
 - Bcrypt hashing with default cost (10 rounds)
 - 12-character minimum password length
 - Force-change flag on first-run admin accounts
+
+## Verifying a Release
+
+Every release carries SHA-384 checksums and a post-quantum signature over them.
+
+```bash
+gh release download vX.Y.Z -p 'SHA384SUMS*'
+go run ./tools/pqsign/ verify SHA384SUMS      # ML-DSA-65, FIPS 204
+sha384sum -c SHA384SUMS --ignore-missing      # then check your download
+```
+
+The signature is ML-DSA-65 and the current signing key fingerprint is
+`2721aaf399c5b42768d0d797`. `pqsign verify` also accepts signatures made under the
+retired Ed25519 placeholder used before 2026-08, so older releases remain
+checkable, and it reports those as NOT post-quantum rather than letting them pass
+as if they were.
+
+### Why the release key is not in CI
+
+The release signing key lives only on a signer's machine. It is deliberately not
+held in CI secrets: a key available to a workflow is a key available to anything
+that can influence that workflow, and a tool whose purpose is assessing other
+people's key management should not hand its own root of trust to a build runner.
+
+So the pipeline builds and publishes, and signing is a separate human step:
+
+```bash
+make sign-release TAG=vX.Y.Z
+```
+
+That script downloads the manifest **as published for that tag**, signs those
+exact bytes locally, verifies the signature before uploading, and re-verifies the
+uploaded copy against the published manifest afterwards. Signing a locally
+regenerated manifest would sign different bytes, because a local build produces
+different binaries and therefore different checksums, and the signature would
+verify against nothing anyone downloads. `make sign-pq` does sign local
+checksums, for locally distributed builds, and says so.
 
 ## Scope
 

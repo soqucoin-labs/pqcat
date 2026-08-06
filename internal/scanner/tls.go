@@ -2,6 +2,7 @@
 package scanner
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
@@ -34,16 +35,13 @@ func DefaultTLSOptions() TLSScanOptions {
 
 // ScanTLS connects to a target host, extracts the TLS certificate chain
 // and negotiated cipher suite, and classifies each cryptographic asset.
-func ScanTLS(target string, opts TLSScanOptions) (*models.ScanResult, error) {
+func ScanTLS(ctx context.Context, target string, opts TLSScanOptions) (*models.ScanResult, error) {
 	start := time.Now()
 
 	host, port := parseTarget(target, opts.Port)
 	addr := net.JoinHostPort(host, port)
 
-	conn, err := tls.DialWithDialer(
-		&net.Dialer{Timeout: opts.Timeout},
-		"tcp",
-		addr,
+	conn, err := dialTLSContext(ctx, "tcp", addr, opts.Timeout,
 		&tls.Config{
 			InsecureSkipVerify: opts.SkipVerify,
 			ServerName:         host,

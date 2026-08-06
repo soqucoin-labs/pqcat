@@ -41,7 +41,14 @@ type HNDLProfile struct {
 
 // hndlFrameworkProfiles maps framework identifiers to their HNDL parameters.
 // Quantum year estimates are based on NIST/NSA published guidance and industry consensus.
-// Retention days reflect regulatory minimums for records retention.
+// NOTE: this is the HNDL *Risk Score* engine (a 0-100 composite with a
+// per-framework threat horizon), which is a DIFFERENT metric from the HNDL
+// *Exposure Multiplier* in internal/compliance/hndl.go (a retention-driven
+// 1.0-6.0 companion weight anchored to the CNSA 2.0 2035 planning horizon).
+// They intentionally differ: this models framework-specific threat-arrival
+// years; the multiplier models the mandate planning horizon. Surfaces must
+// label them distinctly ("HNDL Risk Score" vs "HNDL Exposure ×") so the two
+// are never read as the same number. Retention days reflect regulatory minima.
 var hndlFrameworkProfiles = map[string]HNDLProfile{
 	// Federal / Defense
 	"cnsa2":   {QuantumYear: 2033, RetentionDays: 3650, EnforcementYear: 2033, Name: "CNSA 2.0 (NSA)"},

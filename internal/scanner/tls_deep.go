@@ -19,6 +19,7 @@
 package scanner
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -26,6 +27,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -66,7 +68,7 @@ func DefaultDeepTLSOptions() DeepTLSScanOptions {
 // It enumerates all supported cipher suites and protocol versions,
 // enriches certificate details, checks HTTP headers, and classifies
 // every component for quantum vulnerability.
-func ScanTLSDeep(target string, opts DeepTLSScanOptions) (*DeepTLSResult, *models.ScanResult, error) {
+func ScanTLSDeep(ctx context.Context, target string, opts DeepTLSScanOptions) (*DeepTLSResult, *models.ScanResult, error) {
 	start := time.Now()
 
 	host, port := parseTarget(target, opts.Port)
@@ -80,7 +82,7 @@ func ScanTLSDeep(target string, opts DeepTLSScanOptions) (*DeepTLSResult, *model
 	}
 
 	// ── Phase 1: Initial connection (default — usually ECDSA cert) ──
-	conn, state, err := connectTLS(host, port, opts.Timeout, nil, 0, 0)
+	conn, state, err := connectTLS(ctx, host, port, opts.Timeout, nil, 0, 0)
 	if err != nil {
 		return nil, nil, fmt.Errorf("initial TLS connection failed: %w", err)
 	}
@@ -96,23 +98,23 @@ func ScanTLSDeep(target string, opts DeepTLSScanOptions) (*DeepTLSResult, *model
 		0x009d, // TLS_RSA_WITH_AES_256_GCM_SHA384
 	}
 	var rsaState tls.ConnectionState
-	rsaConn, rsaSt, rsaErr := connectTLS(host, port, opts.Timeout, rsaSuites, tls.VersionTLS12, tls.VersionTLS12)
+	rsaConn, rsaSt, rsaErr := connectTLS(ctx, host, port, opts.Timeout, rsaSuites, tls.VersionTLS12, tls.VersionTLS12)
 	if rsaErr == nil && rsaConn != nil {
 		rsaState = rsaSt
 		rsaConn.Close()
 	}
 
 	// ── Phase 2: Protocol version probing ──
-	probeProtocols(host, port, opts, result)
+	probeProtocols(ctx, host, port, opts, result)
 
 	// ── Phase 3: Legacy protocol detection (SSLv3, SSLv2) via raw TCP ──
 	if !opts.SkipLegacy {
-		probeSSLv3(host, port, opts.Timeout, result)
-		probeSSLv2(host, port, opts.Timeout, result)
+		probeSSLv3(ctx, host, port, opts.Timeout, result)
+		probeSSLv2(ctx, host, port, opts.Timeout, result)
 	}
 
 	// ── Phase 4: Cipher suite enumeration (TLS 1.2 only) ──
-	probeCipherSuites(host, port, opts, result)
+	probeCipherSuites(ctx, host, port, opts, result)
 
 	// ── Phase 4b: TLS 1.3 cipher suites (hard-registered — Go can't probe individually) ──
 	registerTLS13Suites(result)
@@ -121,10 +123,10 @@ func ScanTLSDeep(target string, opts DeepTLSScanOptions) (*DeepTLSResult, *model
 	// Go 1.22+ removed these 3 suites from crypto/tls. They still exist on
 	// many servers (Cloudflare, AWS). A compliance tool CANNOT silently omit
 	// suites that exist — that's a liability gap.
-	probeGoDroppedSuites(host, port, opts, result)
+	probeGoDroppedSuites(ctx, host, port, opts, result)
 
 	// ── Phase 5: Server cipher preference detection ──
-	result.ServerPreference = detectServerPreference(host, port, opts.Timeout)
+	result.ServerPreference = detectServerPreference(ctx, host, port, opts.Timeout)
 
 	// ── Phase 6: Certificate chain enrichment ──
 	// Enrich default (ECDSA) chain
@@ -143,12 +145,12 @@ func ScanTLSDeep(target string, opts DeepTLSScanOptions) (*DeepTLSResult, *model
 	// Probes for catastrophically weak cipher suites (export-grade, NULL,
 	// anonymous) that are CRITICAL compliance failures. Uses the same
 	// raw TCP probe infrastructure as Go-dropped suites.
-	result.ExportNullProbes = probeExportNullSuites(host, port, opts.Timeout)
+	result.ExportNullProbes = probeExportNullSuites(ctx, host, port, opts.Timeout)
 
 	// ── Phase 7c: TLS Compression / CRIME detection (Blindspot 5) ──
 	// If TLS-level compression is enabled, the CRIME attack can extract
 	// session cookies. SSL Labs checks this — we should too.
-	result.TLSCompression = probeTLSCompression(host, port, opts.Timeout)
+	result.TLSCompression = probeTLSCompression(ctx, host, port, opts.Timeout)
 
 	// ── Phase 7d: OCSP staple signature analysis (Blindspot 3) ──
 	// First scanner in the world to classify OCSP staple signatures for
@@ -190,7 +192,7 @@ func ScanTLSDeep(target string, opts DeepTLSScanOptions) (*DeepTLSResult, *model
 	// ── Phase 9: Key Exchange Group Enumeration (Blindspot 2 + 1) ──
 	// Probe which named groups/curves the server supports, including
 	// ML-KEM/X25519MLKEM768 hybrid PQ groups — THE crown jewel feature.
-	result.KeyExchangeGroups = probeKeyExchangeGroups(host, port, opts.Timeout)
+	result.KeyExchangeGroups = probeKeyExchangeGroups(ctx, host, port, opts.Timeout)
 
 	// Propagate PQ key exchange detection to the top-level result
 	if result.KeyExchangeGroups.PQGroupFound {
@@ -208,7 +210,7 @@ func ScanTLSDeep(target string, opts DeepTLSScanOptions) (*DeepTLSResult, *model
 	// The raw probe may fail if the server rejects our synthetic key_share data,
 	// but Go's native TLS client sends valid ML-KEM keys and can negotiate successfully.
 	if !result.PQKeyExchangeDetected {
-		if pqDetected, pqGroup := detectPQKeyExchangeViaGoTLS(host, port, opts.Timeout); pqDetected {
+		if pqDetected, pqGroup := detectPQKeyExchangeViaGoTLS(ctx, host, port, opts.Timeout); pqDetected {
 			result.PQKeyExchangeDetected = true
 			result.PQKeyExchangeGroup = pqGroup
 
@@ -256,9 +258,40 @@ func ScanTLSDeep(target string, opts DeepTLSScanOptions) (*DeepTLSResult, *model
 	// KEX because the cipher suite name doesn't include the key exchange.
 	// Now that we know the actual negotiated groups, update them.
 	if result.PQKeyExchangeDetected && result.PQKeyExchangeGroup != "" {
+		// A server that supports no classical group can only ever negotiate
+		// the hybrid PQ exchange, so the suite's key-exchange component is
+		// compliant. While classical groups are still offered, connections
+		// can still be negotiated classically, so the zone stays as
+		// classified (the label alone must not flip the verdict).
+		// Upgrading the zone requires POSITIVE evidence: at least one supported
+		// quantum-safe group, and no supported classical one. Deriving pq-only
+		// from the mere absence of a classical group would fail open whenever
+		// enumeration returned nothing usable — an empty group list, or a list
+		// in which nothing is marked Supported, would satisfy "no classical
+		// group found" and silently turn every TLS 1.3 suite GREEN on a server
+		// we actually learned nothing about.
+		pqOnly := false
+		if result.KeyExchangeGroups != nil {
+			sawSupportedGreen := false
+			sawSupportedClassical := false
+			for _, g := range result.KeyExchangeGroups.Groups {
+				if !g.Supported {
+					continue
+				}
+				if g.Zone == models.ZoneGreen {
+					sawSupportedGreen = true
+				} else {
+					sawSupportedClassical = true
+				}
+			}
+			pqOnly = sawSupportedGreen && !sawSupportedClassical
+		}
 		for i := range result.CipherSuites {
 			if result.CipherSuites[i].KeyExchange == "X25519/P-256 (TLS 1.3)" {
 				result.CipherSuites[i].KeyExchange = fmt.Sprintf("%s (TLS 1.3 PQ-hybrid)", result.PQKeyExchangeGroup)
+				if pqOnly {
+					result.CipherSuites[i].KeyExchangeZone = models.ZoneGreen
+				}
 			}
 		}
 	}
@@ -284,7 +317,7 @@ func ScanTLSDeep(target string, opts DeepTLSScanOptions) (*DeepTLSResult, *model
 
 	// ── Phase 10: Secure Renegotiation (Blindspot 6) ──
 	// Check RFC 5746 renegotiation_info extension / SCSV support.
-	result.SecureRenegotiation = checkSecureRenegotiation(host, port, opts.Timeout)
+	result.SecureRenegotiation = checkSecureRenegotiation(ctx, host, port, opts.Timeout)
 
 	// ── Phase 11: HNDL Risk Quantification Engine (Patent: PQCAT-P002) ──
 	// Aggregate all discovered cryptographic assets and compute the multi-factor
@@ -315,23 +348,52 @@ func ScanTLSDeep(target string, opts DeepTLSScanOptions) (*DeepTLSResult, *model
 	return result, scanResult, nil
 }
 
-// EstimateDeepScan does a quick TCP port scan to estimate how long a deep scan would take.
-func EstimateDeepScan(targets []string, port string, timeout time.Duration, workers int) *DeepScanEstimate {
+// EstimateDeepScan does a quick TCP port scan to estimate how long a deep scan
+// would take. Wired into `pqcat scan --deep <range>`, which otherwise ran for
+// many minutes with nothing on screen to say how many minutes.
+//
+// The estimate is deliberately cheap: a single TCP connect per host, bounded by
+// the same worker limit as the real scan, so the pre-flight cost is a small
+// fraction of what it is estimating. It counts reachable hosts rather than
+// guessing from the range size, because a /24 with four live hosts and a /24
+// that is fully populated are two very different waits.
+func EstimateDeepScan(ctx context.Context, targets []string, port string, timeout time.Duration, workers int) *DeepScanEstimate {
+	// Accept the same target forms ScanRange does. Estimating over the raw
+	// argument list would report "0/1 hosts" for a /24, since expansion happens
+	// inside the scan.
+	defaultPort := 443
+	if p, err := strconv.Atoi(port); err == nil && p > 0 {
+		defaultPort = p
+	}
+	if expanded, err := expandTargets(targets, defaultPort); err == nil && len(expanded) > 0 {
+		targets = expanded
+	}
+
 	reachable := 0
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, workers)
 
+	ctx = orBackground(ctx)
 	for _, target := range targets {
+		if ctxDone(ctx) {
+			break
+		}
 		wg.Add(1)
+		// Acquire BEFORE spawning, matching ScanRange. Acquiring inside the
+		// goroutine bounds concurrent work but not goroutine count: the loop
+		// would spawn one per target immediately and each would sit blocked on
+		// the semaphore, so a /16 expanded to 65,536 hosts meant 65,536 live
+		// goroutines and their stacks rather than `workers` of them.
+		sem <- struct{}{}
+
 		go func(t string) {
 			defer wg.Done()
-			sem <- struct{}{}
 			defer func() { <-sem }()
 
 			host, p := parseTarget(t, port)
 			addr := net.JoinHostPort(host, p)
-			conn, err := net.DialTimeout("tcp", addr, timeout)
+			conn, err := dialContext(ctx, "tcp", addr, timeout)
 			if err == nil {
 				conn.Close()
 				mu.Lock()
@@ -343,9 +405,19 @@ func EstimateDeepScan(targets []string, port string, timeout time.Duration, work
 	wg.Wait()
 
 	// Deep scan takes ~20s per target with 8 probe workers.
-	// With N concurrent scan workers, total = (reachable / N) * 20s
+	// With N concurrent scan workers, total = (reachable / N) * 20s.
+	// Zero reachable hosts means zero work, not one round: reporting "~20
+	// seconds" for a range where nothing answered would misdescribe a scan that
+	// is about to find nothing at all.
 	perTarget := 20 * time.Second
-	totalParallel := time.Duration(reachable/workers+1) * perTarget
+	var totalParallel time.Duration
+	if reachable > 0 {
+		if workers < 1 {
+			workers = 1
+		}
+		rounds := (reachable + workers - 1) / workers // ceiling, not floor+1
+		totalParallel = time.Duration(rounds) * perTarget
+	}
 
 	return &DeepScanEstimate{
 		TotalTargets:      len(targets),
@@ -361,7 +433,7 @@ func EstimateDeepScan(targets []string, port string, timeout time.Duration, work
 // ──────────────────────────────────────────────────────────────────────────────
 
 // probeProtocols tests TLS 1.0, 1.1, 1.2, 1.3 support.
-func probeProtocols(host, port string, opts DeepTLSScanOptions, result *DeepTLSResult) {
+func probeProtocols(ctx context.Context, host, port string, opts DeepTLSScanOptions, result *DeepTLSResult) {
 	type versionProbe struct {
 		name    string
 		version uint16
@@ -387,7 +459,7 @@ func probeProtocols(host, port string, opts DeepTLSScanOptions, result *DeepTLSR
 		wg.Add(1)
 		go func(probe versionProbe) {
 			defer wg.Done()
-			conn, _, err := connectTLS(host, port, opts.Timeout, nil, probe.version, probe.version)
+			conn, _, err := connectTLS(ctx, host, port, opts.Timeout, nil, probe.version, probe.version)
 			supported := err == nil
 			if conn != nil {
 				conn.Close()
@@ -419,7 +491,7 @@ func probeProtocols(host, port string, opts DeepTLSScanOptions, result *DeepTLSR
 // probeCipherSuites tests every known TLS 1.2 cipher suite against the server.
 // TLS 1.3 suites are handled separately by registerTLS13Suites() because
 // Go's tls.Config.CipherSuites field has NO effect on TLS 1.3 negotiation.
-func probeCipherSuites(host, port string, opts DeepTLSScanOptions, result *DeepTLSResult) {
+func probeCipherSuites(ctx context.Context, host, port string, opts DeepTLSScanOptions, result *DeepTLSResult) {
 	// Gather all cipher suites Go knows about
 	allSuites := allCipherSuiteIDs()
 
@@ -448,7 +520,7 @@ func probeCipherSuites(host, port string, opts DeepTLSScanOptions, result *DeepT
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			conn, state, err := connectTLS(host, port, opts.Timeout, []uint16{s.id}, tls.VersionTLS12, tls.VersionTLS12)
+			conn, state, err := connectTLS(ctx, host, port, opts.Timeout, []uint16{s.id}, tls.VersionTLS12, tls.VersionTLS12)
 			if err == nil && conn != nil {
 				conn.Close()
 				// Bug fix: verify server negotiated the suite we offered,
@@ -506,9 +578,9 @@ func registerTLS13Suites(result *DeepTLSResult) {
 }
 
 // detectServerPreference checks if the server enforces its own cipher order.
-func detectServerPreference(host, port string, timeout time.Duration) bool {
+func detectServerPreference(ctx context.Context, host, port string, timeout time.Duration) bool {
 	// Connect with default (Go-preferred) order
-	conn1, state1, err1 := connectTLS(host, port, timeout, nil, 0, 0)
+	conn1, state1, err1 := connectTLS(ctx, host, port, timeout, nil, 0, 0)
 	if err1 != nil {
 		return false
 	}
@@ -517,7 +589,7 @@ func detectServerPreference(host, port string, timeout time.Duration) bool {
 
 	// Connect with reversed order: put the weakest suites first
 	reversed := reversedCipherSuiteIDs()
-	conn2, state2, err2 := connectTLS(host, port, timeout, reversed, 0, 0)
+	conn2, state2, err2 := connectTLS(ctx, host, port, timeout, reversed, 0, 0)
 	if err2 != nil {
 		return false
 	}
@@ -1040,7 +1112,7 @@ func classifyCipherSuite(id uint16, name string, version uint16) CipherSuiteResu
 // ──────────────────────────────────────────────────────────────────────────────
 
 // connectTLS makes a TLS connection with optional cipher suite and version constraints.
-func connectTLS(host, port string, timeout time.Duration, suites []uint16, minVer, maxVer uint16) (*tls.Conn, tls.ConnectionState, error) {
+func connectTLS(ctx context.Context, host, port string, timeout time.Duration, suites []uint16, minVer, maxVer uint16) (*tls.Conn, tls.ConnectionState, error) {
 	cfg := &tls.Config{
 		InsecureSkipVerify: true,
 		ServerName:         host,
@@ -1057,12 +1129,7 @@ func connectTLS(host, port string, timeout time.Duration, suites []uint16, minVe
 	}
 
 	addr := net.JoinHostPort(host, port)
-	conn, err := tls.DialWithDialer(
-		&net.Dialer{Timeout: timeout},
-		"tcp",
-		addr,
-		cfg,
-	)
+	conn, err := dialTLSContext(ctx, "tcp", addr, timeout, cfg)
 	if err != nil {
 		return nil, tls.ConnectionState{}, err
 	}

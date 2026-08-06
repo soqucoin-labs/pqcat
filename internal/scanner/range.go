@@ -2,6 +2,7 @@
 package scanner
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
@@ -33,6 +34,12 @@ type RangeOptions struct {
 
 	// OnProgress is called after each host is scanned.
 	// Args: completed count, total count, current target, result (may be nil on error)
+	//
+	// Invocations are serialized against each other, so an implementation may
+	// write to a terminal or file without its own locking. It is called from
+	// worker goroutines rather than the caller's, arrives in completion order
+	// rather than host order, and should not block for long: it holds up other
+	// workers' progress reports (though not their scanning).
 	OnProgress func(done, total int, target string, result *models.ScanResult)
 }
 
@@ -58,7 +65,7 @@ func DefaultRangeOptions(scanType string) RangeOptions {
 //   - Mixed list of any of the above
 //
 // Returns an aggregated ScanResult with all discovered assets from all hosts.
-func ScanRange(targets []string, opts RangeOptions) (*models.ScanResult, error) {
+func ScanRange(ctx context.Context, targets []string, opts RangeOptions) (*models.ScanResult, error) {
 	start := time.Now()
 
 	// Expand all targets into individual host:port entries
@@ -80,7 +87,11 @@ func ScanRange(targets []string, opts RangeOptions) (*models.ScanResult, error) 
 
 	// Semaphore for concurrency control
 	sem := make(chan struct{}, opts.Concurrency)
+	// mu guards the aggregation state below; progressMu serializes only the
+	// caller's progress callback. Keeping them separate means a slow or blocking
+	// callback cannot stall workers that are merely recording results.
 	var mu sync.Mutex
+	var progressMu sync.Mutex
 	var wg sync.WaitGroup
 
 	done := 0
@@ -90,7 +101,17 @@ func ScanRange(targets []string, opts RangeOptions) (*models.ScanResult, error) 
 	var scanErrors []string
 	var unreachableHosts []string
 
+	ctx = orBackground(ctx)
+	cancelled := false
+
 	for _, host := range hosts {
+		// Stop dispatching once the caller has given up. Cancellation then takes
+		// effect within one host's timeout rather than after the whole range:
+		// in-flight hosts abort on their own dial context, and no new ones start.
+		if ctxDone(ctx) {
+			cancelled = true
+			break
+		}
 		wg.Add(1)
 		sem <- struct{}{} // Acquire semaphore
 
@@ -114,14 +135,14 @@ func ScanRange(targets []string, opts RangeOptions) (*models.ScanResult, error) 
 					if opts.Timeout > deepOpts.Timeout {
 						deepOpts.Timeout = opts.Timeout
 					}
-					_, hostResult, scanErr = ScanTLSDeep(target, deepOpts)
+					_, hostResult, scanErr = ScanTLSDeep(ctx, target, deepOpts)
 				} else {
 					tlsOpts := TLSScanOptions{Timeout: opts.Timeout}
-					hostResult, scanErr = ScanTLS(target, tlsOpts)
+					hostResult, scanErr = ScanTLS(ctx, target, tlsOpts)
 				}
 			case "ssh":
 				sshOpts := SSHScanOptions{Timeout: opts.Timeout}
-				hostResult, scanErr = ScanSSH(target, sshOpts)
+				hostResult, scanErr = ScanSSH(ctx, target, sshOpts)
 			}
 
 			mu.Lock()
@@ -135,11 +156,24 @@ func ScanRange(targets []string, opts RangeOptions) (*models.ScanResult, error) 
 				scanErrors = append(scanErrors, fmt.Sprintf("%s: %v", target, scanErr))
 				unreachableHosts = append(unreachableHosts, target)
 			}
-
-			if opts.OnProgress != nil {
-				opts.OnProgress(done, total, target, hostResult)
-			}
+			// Snapshot the counter, then release the state lock BEFORE
+			// reporting. OnProgress is caller-supplied and does I/O (the CLI
+			// renders a progress line), so invoking it under the state mutex
+			// made every worker wait on another worker's terminal write just to
+			// record its own results.
+			progress := done
 			mu.Unlock()
+
+			// Progress reporting gets its own lock rather than none: the
+			// callback contract is single-writer, and the CLI's \r-based
+			// single-line progress would garble if workers wrote concurrently.
+			// Separating the two locks means output stays ordered without
+			// scan-state updates queuing behind I/O.
+			if opts.OnProgress != nil {
+				progressMu.Lock()
+				opts.OnProgress(progress, total, target, hostResult)
+				progressMu.Unlock()
+			}
 		}(host)
 	}
 
@@ -169,6 +203,21 @@ func ScanRange(targets []string, opts RangeOptions) (*models.ScanResult, error) 
 				len(scanErrors), total,
 				strings.Join(scanErrors, "; "))
 		}
+	}
+
+	// A cancelled scan is an incomplete scan, and saying so is not optional.
+	// Returning the hosts we happened to finish with no error set would let a
+	// partial sweep be scored and exported as though it had covered the range,
+	// which makes interrupting a scan a way to manufacture a better number. The
+	// error is prefixed so it survives alongside any unreachable-host summary.
+	if cancelled || ctxDone(ctx) {
+		note := fmt.Sprintf("scan cancelled after %d/%d hosts (%v)", hostsScanned, total, ctx.Err())
+		if result.Error == "" {
+			result.Error = note
+		} else {
+			result.Error = note + "; " + result.Error
+		}
+		return result, ctx.Err()
 	}
 
 	return result, nil

@@ -2,6 +2,7 @@
 package scanner
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
@@ -20,7 +21,7 @@ import (
 // ScanPKI analyzes certificate files or directories for quantum-vulnerable algorithms.
 // Supports PEM and DER-encoded certificates (.pem, .crt, .cer, .der).
 // If target is a directory, recursively scans all certificate files.
-func ScanPKI(target string) (*models.ScanResult, error) {
+func ScanPKI(ctx context.Context, target string) (*models.ScanResult, error) {
 	start := time.Now()
 
 	result := &models.ScanResult{

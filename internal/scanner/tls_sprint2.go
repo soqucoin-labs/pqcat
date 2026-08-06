@@ -12,6 +12,7 @@
 package scanner
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/binary"
 	"fmt"
@@ -99,7 +100,7 @@ func supportedNamedGroups() []namedGroupInfo {
 // ECDHE suites within that group.
 //
 // For TLS 1.3: We use supported_groups + key_share extension offering the single group.
-func probeKeyExchangeGroups(host, port string, timeout time.Duration) *KeyExchangeGroupsResult {
+func probeKeyExchangeGroups(ctx context.Context, host, port string, timeout time.Duration) *KeyExchangeGroupsResult {
 	result := &KeyExchangeGroupsResult{
 		OverallZone: models.ZoneRed,
 	}
@@ -110,13 +111,13 @@ func probeKeyExchangeGroups(host, port string, timeout time.Duration) *KeyExchan
 		supported := false
 
 		if group.id >= 0x6399 { // PQ groups — TLS 1.3 only
-			supported = probeTLS13Group(host, port, timeout, group.id)
+			supported = probeTLS13Group(ctx, host, port, timeout, group.id)
 		} else if group.id >= 0x0100 { // FFDHE groups — TLS 1.3 or TLS 1.2
-			supported = probeTLS13Group(host, port, timeout, group.id)
+			supported = probeTLS13Group(ctx, host, port, timeout, group.id)
 		} else { // ECDHE groups — try both TLS 1.3 and TLS 1.2
-			supported = probeTLS13Group(host, port, timeout, group.id)
+			supported = probeTLS13Group(ctx, host, port, timeout, group.id)
 			if !supported {
-				supported = probeTLS12Group(host, port, timeout, group.id)
+				supported = probeTLS12Group(ctx, host, port, timeout, group.id)
 			}
 		}
 
@@ -172,9 +173,9 @@ func probeKeyExchangeGroups(host, port string, timeout time.Duration) *KeyExchan
 // probeTLS13Group sends a TLS 1.3 ClientHello offering a single group in both
 // supported_groups and key_share. If the server responds with a ServerHello
 // containing key_share with matching group, it's supported.
-func probeTLS13Group(host, port string, timeout time.Duration, groupID uint16) bool {
+func probeTLS13Group(ctx context.Context, host, port string, timeout time.Duration, groupID uint16) bool {
 	addr := net.JoinHostPort(host, port)
-	conn, err := net.DialTimeout("tcp", addr, timeout)
+	conn, err := dialContext(ctx, "tcp", addr, timeout)
 	if err != nil {
 		return false
 	}
@@ -207,7 +208,7 @@ func probeTLS13Group(host, port string, timeout time.Duration, groupID uint16) b
 
 // probeTLS12Group sends a TLS 1.2 ClientHello with a single group in
 // supported_groups and an ECDHE cipher suite. Server acceptance = group supported.
-func probeTLS12Group(host, port string, timeout time.Duration, groupID uint16) bool {
+func probeTLS12Group(ctx context.Context, host, port string, timeout time.Duration, groupID uint16) bool {
 	// Build a TLS 1.2 ClientHello offering only this group
 	suites := []uint16{
 		0xC02C, // TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
@@ -216,14 +217,14 @@ func probeTLS12Group(host, port string, timeout time.Duration, groupID uint16) b
 		0xC030, // TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
 	}
 
-	return probeRawTLSWithGroup(host, port, timeout, 0x0303, suites, groupID)
+	return probeRawTLSWithGroup(ctx, host, port, timeout, 0x0303, suites, groupID)
 }
 
 // probeRawTLSWithGroup sends a ClientHello offering specific cipher suites with
 // a single supported group. Returns true if the server accepts.
-func probeRawTLSWithGroup(host, port string, timeout time.Duration, version uint16, suites []uint16, groupID uint16) bool {
+func probeRawTLSWithGroup(ctx context.Context, host, port string, timeout time.Duration, version uint16, suites []uint16, groupID uint16) bool {
 	addr := net.JoinHostPort(host, port)
-	conn, err := net.DialTimeout("tcp", addr, timeout)
+	conn, err := dialContext(ctx, "tcp", addr, timeout)
 	if err != nil {
 		return false
 	}
@@ -582,19 +583,19 @@ type SecureRenegotiationResult struct {
 //
 // Method: Use Go's crypto/tls to connect and check the ConnectionState.
 // The Go TLS library automatically negotiates renegotiation_info if available.
-func checkSecureRenegotiation(host, port string, timeout time.Duration) *SecureRenegotiationResult {
+func checkSecureRenegotiation(ctx context.Context, host, port string, timeout time.Duration) *SecureRenegotiationResult {
 	addr := net.JoinHostPort(host, port)
 
 	// First: Try Go's TLS library which handles renegotiation_info natively
 	dialer := &net.Dialer{Timeout: timeout}
-	conn, err := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{
+	conn, err := dialTLSContext(ctx, "tcp", addr, dialer.Timeout, &tls.Config{
 		InsecureSkipVerify: true,
 		MinVersion:         tls.VersionTLS10,
 		MaxVersion:         tls.VersionTLS12, // Renegotiation only applies to TLS 1.2 and below
 	})
 	if err != nil {
 		// Can't connect — test via raw probe
-		return checkSecureRenegotiationRaw(host, port, timeout)
+		return checkSecureRenegotiationRaw(ctx, host, port, timeout)
 	}
 	defer conn.Close()
 
@@ -628,7 +629,7 @@ func checkSecureRenegotiation(host, port string, timeout time.Duration) *SecureR
 
 // checkSecureRenegotiationRaw probes for renegotiation support using raw TCP
 // when the Go TLS library can't connect (e.g., server requires specific settings).
-func checkSecureRenegotiationRaw(host, port string, timeout time.Duration) *SecureRenegotiationResult {
+func checkSecureRenegotiationRaw(ctx context.Context, host, port string, timeout time.Duration) *SecureRenegotiationResult {
 	// Send a ClientHello with TLS_EMPTY_RENEGOTIATION_INFO_SCSV (0x00FF)
 	// included in the cipher suite list. If the server responds, it supports SCSV.
 
@@ -637,7 +638,7 @@ func checkSecureRenegotiationRaw(host, port string, timeout time.Duration) *Secu
 		0x00FF, // TLS_EMPTY_RENEGOTIATION_INFO_SCSV
 	}
 
-	supported := probeRawTLS(host, port, timeout, 0x0303, suites)
+	supported := probeRawTLS(ctx, host, port, timeout, 0x0303, suites)
 
 	if supported {
 		// Now check if the server also sends the renegotiation_info extension
@@ -652,7 +653,7 @@ func checkSecureRenegotiationRaw(host, port string, timeout time.Duration) *Secu
 
 	// Server rejected our probe entirely — check without SCSV
 	nonSCSVSuites := []uint16{0xC02F}
-	if probeRawTLS(host, port, timeout, 0x0303, nonSCSVSuites) {
+	if probeRawTLS(ctx, host, port, timeout, 0x0303, nonSCSVSuites) {
 		// Server accepts connections but rejects SCSV — BAD
 		return &SecureRenegotiationResult{
 			Supported: false,
@@ -682,13 +683,13 @@ func checkSecureRenegotiationRaw(host, port string, timeout time.Duration) *Secu
 // experimental X25519MLKEM768 support behind GOEXPERIMENT or CurvePreferences.
 // We use the raw TCP probe (probeTLS13Group) as the PRIMARY method because
 // it works regardless of Go version.
-func detectPQKeyExchangeViaGoTLS(host, port string, timeout time.Duration) (bool, string) {
+func detectPQKeyExchangeViaGoTLS(ctx context.Context, host, port string, timeout time.Duration) (bool, string) {
 	addr := net.JoinHostPort(host, port)
 	dialer := &net.Dialer{Timeout: timeout}
 
 	// Go 1.24+ includes X25519MLKEM768 by default in TLS 1.3.
 	// Go 1.26 exposes ConnectionState.CurveID for the negotiated group.
-	conn, err := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{
+	conn, err := dialTLSContext(ctx, "tcp", addr, dialer.Timeout, &tls.Config{
 		InsecureSkipVerify: true,
 		MinVersion:         tls.VersionTLS13,
 		MaxVersion:         tls.VersionTLS13,

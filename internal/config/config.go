@@ -225,19 +225,67 @@ func Load(explicitPath string) (*Config, string) {
 		}
 	}
 
-	// Environment variable overrides
+	// Environment variable overrides. The reported source names the last file
+	// loaded; env vars override individual fields on top of it, so note when any
+	// PQCAT_* override is present rather than implying the file is the whole story.
 	applyEnvOverrides(cfg)
+	if envOverridesPresent() {
+		source += " (+ env overrides)"
+	}
+
+	// Absolutize a relative database path against home. A relative path (e.g.
+	// "./pqcat.db" from a file or PQCAT_DB_PATH) otherwise resolves against the
+	// process working directory, which differs between an .app launch (cwd=/)
+	// and a terminal launch — silently splitting scan history across two files.
+	cfg.Database.Path = absolutizeDBPath(cfg.Database.Path)
 
 	return cfg, source
+}
+
+// absolutizeDBPath resolves a relative SQLite path against ~/.pqcat so the same
+// history file is opened regardless of the process working directory. Absolute
+// paths and the in-memory ":memory:" sentinel are returned unchanged.
+func absolutizeDBPath(p string) string {
+	if p == "" || p == ":memory:" || filepath.IsAbs(p) {
+		return p
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return p
+	}
+	return filepath.Join(home, ".pqcat", filepath.Base(p))
+}
+
+// envOverridesPresent reports whether any PQCAT_* config override is set, so
+// the reported config source can say so instead of misleadingly naming only a
+// file. (Per-field provenance is a larger change; this is the honest minimum.)
+func envOverridesPresent() bool {
+	for _, k := range []string{
+		"PQCAT_FRAMEWORK", "PQCAT_CRITICALITY", "PQCAT_ORGANIZATION", "PQCAT_ENVIRONMENT",
+		"PQCAT_REPORT_FORMAT", "PQCAT_BASELINE_DIR", "PQCAT_DATA_RETENTION", "PQCAT_CONFIDENTIAL",
+		"PQCAT_WORKERS", "PQCAT_OUTPUT_DIR", "PQCAT_DB_PATH", "PQCAT_SIEM_ENDPOINT",
+		"PQCAT_SIEM_FORMAT", "PQCAT_INTEL_SIDECAR", "PQCAT_LISTEN", "PQCAT_API_KEY",
+		"PQCAT_RATE_LIMIT", "PQCAT_CORS_ORIGIN",
+	} {
+		if os.Getenv(k) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // getConfigPaths returns config file paths in ascending priority order.
 func getConfigPaths() []string {
 	var paths []string
 
+	// Paths are merged low-to-high (later wins). Within EACH directory the
+	// order is always config.yaml then pqcat.yaml, so pqcat.yaml (the
+	// documented canonical filename) consistently wins over a config.yaml in
+	// the same directory. Previously the intra-directory order differed by
+	// location (config.yaml won in /etc and cwd, pqcat.yaml won in home).
+
 	// Lowest priority: system-wide
-	paths = append(paths, "/etc/pqcat/pqcat.yaml")
-	paths = append(paths, "/etc/pqcat/config.yaml")
+	paths = append(paths, "/etc/pqcat/config.yaml", "/etc/pqcat/pqcat.yaml")
 
 	// Medium priority: user home
 	if home, err := os.UserHomeDir(); err == nil {
@@ -248,7 +296,7 @@ func getConfigPaths() []string {
 	}
 
 	// Highest priority: current directory
-	paths = append(paths, "pqcat.yaml", "config.yaml")
+	paths = append(paths, "config.yaml", "pqcat.yaml")
 
 	return paths
 }
@@ -362,12 +410,46 @@ func mergeConfig(dst, src *Config) {
 	if src.Server.CORSOrigin != "" {
 		dst.Server.CORSOrigin = src.Server.CORSOrigin
 	}
+	// Alerts: previously OMITTED here, so every alerts: block in a config file
+	// was silently discarded and alerts never fired. Merge the whole struct
+	// when the file defines any channel or trigger (these are compound/pointer
+	// fields; a field-by-field merge would be brittle and error-prone).
+	if len(src.Alerts.Webhooks) > 0 || src.Alerts.Slack != nil || src.Alerts.CDM != nil ||
+		src.Alerts.Email != nil || src.Alerts.AlertOnScan || src.Alerts.AlertOnDrift ||
+		src.Alerts.AlertOnRed || src.Alerts.ScoreDropMin > 0 {
+		dst.Alerts = src.Alerts
+	}
+	// Branding: previously OMITTED here, so custom logo/accent/tagline/footer/
+	// classification from a config file never reached the PDF generator.
+	if src.Branding.LogoPath != "" || src.Branding.AccentColor != "" ||
+		src.Branding.OrgName != "" || src.Branding.Tagline != "" ||
+		src.Branding.CoverPage != nil || src.Branding.FooterText != "" ||
+		src.Branding.Classification != "" {
+		dst.Branding = src.Branding
+	}
 }
 
 // applyEnvOverrides reads PQCAT_* environment variables.
 func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("PQCAT_FRAMEWORK"); v != "" {
 		cfg.Framework = v
+	}
+	// Previously missing env layers — the documented "env > file" precedence
+	// did not actually exist for these settings.
+	if v := os.Getenv("PQCAT_CRITICALITY"); v != "" {
+		cfg.Criticality = v
+	}
+	if v := os.Getenv("PQCAT_ORGANIZATION"); v != "" {
+		cfg.Organization = v
+	}
+	if v := os.Getenv("PQCAT_ENVIRONMENT"); v != "" {
+		cfg.Environment = v
+	}
+	if v := os.Getenv("PQCAT_REPORT_FORMAT"); v != "" {
+		cfg.ReportFormat = v
+	}
+	if v := os.Getenv("PQCAT_BASELINE_DIR"); v != "" {
+		cfg.BaselineDir = v
 	}
 	if v := os.Getenv("PQCAT_DATA_RETENTION"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
