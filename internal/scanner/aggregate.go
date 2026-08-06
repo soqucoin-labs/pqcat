@@ -4,6 +4,7 @@
 package scanner
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -57,7 +58,7 @@ func DefaultAggregateOptions() AggregateOptions {
 // ScanAggregate runs multiple scan types and merges all results.
 // Returns a unified ScanResult with assets from all scan types and
 // a combined compliance score.
-func ScanAggregate(opts AggregateOptions) (*models.ScanResult, error) {
+func ScanAggregate(ctx context.Context, opts AggregateOptions) (*models.ScanResult, error) {
 	start := time.Now()
 
 	combined := &models.ScanResult{
@@ -85,15 +86,24 @@ func ScanAggregate(opts AggregateOptions) (*models.ScanResult, error) {
 			// CIDR range
 			rangeOpts := DefaultRangeOptions("tls")
 			rangeOpts.Concurrency = opts.Workers
-			result, err := ScanRange([]string{target}, rangeOpts)
+			result, err := ScanRange(ctx, []string{target}, rangeOpts)
 			if err != nil {
 				scanErrors = append(scanErrors, fmt.Sprintf("TLS %s: %v", target, err))
 				continue
 			}
 			combined.Assets = append(combined.Assets, result.Assets...)
 		} else {
-			tlsOpts := DefaultTLSOptions()
-			result, err := ScanTLS(target, tlsOpts)
+			// Single host: run the DEEP TLS scan, same as the dedicated TLS
+			// path. A full/aggregate assessment must be a superset of the
+			// narrower TLS scan; the shallow single-handshake ScanTLS here
+			// made "Full Assessment" of a host return ~9 assets where the
+			// TLS scan returned 56+ (negotiated cipher + cert chain only,
+			// vs full cipher/protocol/key-exchange enumeration). CIDR
+			// ranges above intentionally stay shallow: a range sweep is
+			// breadth-first by design.
+			deepOpts := DefaultDeepTLSOptions()
+			deepOpts.SkipHTTP = true
+			_, result, err := ScanTLSDeep(ctx, target, deepOpts)
 			if err != nil {
 				scanErrors = append(scanErrors, fmt.Sprintf("TLS %s: %v", target, err))
 				continue
@@ -112,7 +122,7 @@ func ScanAggregate(opts AggregateOptions) (*models.ScanResult, error) {
 			// swept here too or CIDR targets get zero SSH coverage.
 			rangeOpts := DefaultRangeOptions("ssh")
 			rangeOpts.Concurrency = opts.Workers
-			result, err := ScanRange([]string{target}, rangeOpts)
+			result, err := ScanRange(ctx, []string{target}, rangeOpts)
 			if err != nil {
 				scanErrors = append(scanErrors, fmt.Sprintf("SSH %s: %v", target, err))
 				continue
@@ -122,7 +132,7 @@ func ScanAggregate(opts AggregateOptions) (*models.ScanResult, error) {
 		}
 
 		sshOpts := DefaultSSHOptions()
-		result, err := ScanSSH(target, sshOpts)
+		result, err := ScanSSH(ctx, target, sshOpts)
 		if err != nil {
 			// SSH may not be running on a single host — not an error for aggregate
 			continue
@@ -135,7 +145,7 @@ func ScanAggregate(opts AggregateOptions) (*models.ScanResult, error) {
 		progress("sbom", fmt.Sprintf("Analyzing %s...", sbomFile))
 		scanCount++
 
-		result, err := ScanSBOM(sbomFile, opts.SBOMFormat)
+		result, err := ScanSBOM(ctx, sbomFile, opts.SBOMFormat)
 		if err != nil {
 			scanErrors = append(scanErrors, fmt.Sprintf("SBOM %s: %v", sbomFile, err))
 			continue
@@ -148,7 +158,7 @@ func ScanAggregate(opts AggregateOptions) (*models.ScanResult, error) {
 		progress("code", fmt.Sprintf("Scanning %s...", codePath))
 		scanCount++
 
-		result, err := ScanCode(codePath)
+		result, err := ScanCode(ctx, codePath)
 		if err != nil {
 			scanErrors = append(scanErrors, fmt.Sprintf("Code %s: %v", codePath, err))
 			continue
@@ -161,7 +171,7 @@ func ScanAggregate(opts AggregateOptions) (*models.ScanResult, error) {
 		progress("pki", fmt.Sprintf("Analyzing %s...", pkiPath))
 		scanCount++
 
-		result, err := ScanPKI(pkiPath)
+		result, err := ScanPKI(ctx, pkiPath)
 		if err != nil {
 			scanErrors = append(scanErrors, fmt.Sprintf("PKI %s: %v", pkiPath, err))
 			continue
@@ -174,7 +184,7 @@ func ScanAggregate(opts AggregateOptions) (*models.ScanResult, error) {
 		progress("scap", fmt.Sprintf("Importing %s...", scapFile))
 		scanCount++
 
-		result, err := ScanSCAP(scapFile)
+		result, err := ScanSCAP(ctx, scapFile)
 		if err != nil {
 			scanErrors = append(scanErrors, fmt.Sprintf("SCAP %s: %v", scapFile, err))
 			continue
@@ -187,7 +197,7 @@ func ScanAggregate(opts AggregateOptions) (*models.ScanResult, error) {
 		progress("hsm", "Discovering hardware security modules...")
 		scanCount++
 
-		result, err := ScanHSM("auto")
+		result, err := ScanHSM(ctx, "auto")
 		if err != nil {
 			scanErrors = append(scanErrors, fmt.Sprintf("HSM: %v", err))
 		} else {

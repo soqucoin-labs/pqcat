@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -367,7 +368,7 @@ type spdxPackage struct {
 }
 
 // ScanSBOM reads an SBOM file and extracts cryptographic dependencies.
-func ScanSBOM(path string, format SBOMFormat) (*models.ScanResult, error) {
+func ScanSBOM(ctx context.Context, path string, format SBOMFormat) (*models.ScanResult, error) {
 	start := time.Now()
 
 	data, err := os.ReadFile(path)

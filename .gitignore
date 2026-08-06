@@ -1,9 +1,11 @@
 # Binaries
-pqcat
-pqcat-airgap
-pqcat-pro
-pqcat-*-amd64
-pqcat-*-arm64
+# Anchored to the repo root: unanchored "pqcat" also matches the cmd/pqcat
+# directory, which silently ignores any new file added under it.
+/pqcat
+/pqcat-airgap
+/pqcat-pro
+/pqcat-*-amd64
+/pqcat-*-arm64
 *.exe
 
 # Database

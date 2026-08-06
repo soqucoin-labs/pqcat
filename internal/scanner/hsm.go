@@ -4,6 +4,7 @@
 package scanner
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -57,7 +58,7 @@ var knownHSMVendors = []hsmVendor{
 }
 
 // ScanHSM discovers hardware security modules and their cryptographic capabilities.
-func ScanHSM(target string) (*models.ScanResult, error) {
+func ScanHSM(ctx context.Context, target string) (*models.ScanResult, error) {
 	start := time.Now()
 
 	result := &models.ScanResult{

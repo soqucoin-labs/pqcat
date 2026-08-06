@@ -3,7 +3,7 @@
 
 // Package scanner provides live threat intelligence feed for connected environments.
 // This file is only compiled with: go build -tags connected
-// Air-gapped builds exclude this file entirely — no network code in the binary.
+// Air-gapped builds exclude this file entirely, so no threat-intel fetch is linked.
 package scanner
 
 import (

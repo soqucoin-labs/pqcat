@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
@@ -32,7 +33,7 @@ func DefaultSSHOptions() SSHScanOptions {
 
 // ScanSSH connects to a target host and extracts SSH host key and key exchange
 // algorithm information for classification.
-func ScanSSH(target string, opts SSHScanOptions) (*models.ScanResult, error) {
+func ScanSSH(ctx context.Context, target string, opts SSHScanOptions) (*models.ScanResult, error) {
 	start := time.Now()
 
 	host, port := parseTarget(target, opts.Port)
@@ -98,7 +99,7 @@ func ScanSSH(target string, opts SSHScanOptions) (*models.ScanResult, error) {
 	// SSH-5: Enrich with banner capture (product, version, PQ readiness)
 	if len(result.Assets) > 0 {
 		// Grab the raw SSH banner from a TCP connection
-		banner := grabSSHBanner(addr, opts.Timeout)
+		banner := grabSSHBanner(ctx, addr, opts.Timeout)
 		if banner != "" {
 			result.Assets = EnrichSSHWithBanner(result.Assets, banner)
 		}
@@ -163,8 +164,8 @@ func keyBitSize(key ssh.PublicKey) int {
 
 // grabSSHBanner connects via raw TCP and reads the SSH identification string.
 // The banner is the first line sent by the server (e.g. "SSH-2.0-OpenSSH_9.6").
-func grabSSHBanner(addr string, timeout time.Duration) string {
-	conn, err := net.DialTimeout("tcp", addr, timeout)
+func grabSSHBanner(ctx context.Context, addr string, timeout time.Duration) string {
+	conn, err := dialContext(ctx, "tcp", addr, timeout)
 	if err != nil {
 		return ""
 	}

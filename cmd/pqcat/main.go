@@ -9,9 +9,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
 
 	"github.com/soqucoin-labs/pqcat/internal/config"
@@ -205,6 +207,12 @@ func handleScan() {
 		}
 	}
 
+	// Every Scan* entry point takes a context. Wiring it to SIGINT is the
+	// reason the plumbing exists: a range scan over a /16 used to run to
+	// completion no matter what the operator did.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
 	var result *models.ScanResult
 	var err error
 
@@ -227,37 +235,37 @@ func handleScan() {
 					pct, done, total, status, target, assets)
 			}
 			fmt.Fprintf(os.Stderr, "  Scanning %d targets (%s, %d workers)...\n", len(expandedTargets), scanType, workers)
-			result, err = scanner.ScanRange(expandedTargets, opts)
+			result, err = scanner.ScanRange(ctx, expandedTargets, opts)
 			fmt.Fprintln(os.Stderr) // newline after progress
 		} else {
 			target := expandedTargets[0]
 			switch scanType {
 			case "tls":
 				opts := scanner.DefaultTLSOptions()
-				result, err = scanner.ScanTLS(target, opts)
+				result, err = scanner.ScanTLS(ctx, target, opts)
 			case "ssh":
 				opts := scanner.DefaultSSHOptions()
-				result, err = scanner.ScanSSH(target, opts)
+				result, err = scanner.ScanSSH(ctx, target, opts)
 			}
 		}
 	case "sbom":
-		result, err = scanner.ScanSBOM(expandedTargets[0], sbomFormat)
+		result, err = scanner.ScanSBOM(ctx, expandedTargets[0], sbomFormat)
 	case "pki":
-		result, err = scanner.ScanPKI(expandedTargets[0])
+		result, err = scanner.ScanPKI(ctx, expandedTargets[0])
 	case "code":
-		result, err = scanner.ScanCode(expandedTargets[0])
+		result, err = scanner.ScanCode(ctx, expandedTargets[0])
 	case "hsm":
 		target := "auto"
 		if len(expandedTargets) > 0 {
 			target = expandedTargets[0]
 		}
-		result, err = scanner.ScanHSM(target)
+		result, err = scanner.ScanHSM(ctx, target)
 	case "scap":
 		if len(expandedTargets) == 0 {
 			fmt.Fprintln(os.Stderr, "Error: SCAP scan requires a result XML file")
 			os.Exit(1)
 		}
-		result, err = scanner.ScanSCAP(expandedTargets[0])
+		result, err = scanner.ScanSCAP(ctx, expandedTargets[0])
 	case "all":
 		opts := scanner.DefaultAggregateOptions()
 		opts.Workers = workers
@@ -265,13 +273,13 @@ func handleScan() {
 		opts.SBOMFormat = sbomFormat
 		opts.ScanHSM = true
 		fmt.Fprintf(os.Stderr, "  Running aggregate scan across all modules...\n")
-		result, err = scanner.ScanAggregate(opts)
+		result, err = scanner.ScanAggregate(ctx, opts)
 	case "config":
 		if len(expandedTargets) == 0 {
 			fmt.Fprintln(os.Stderr, "Error: config scan requires a target file or directory")
 			os.Exit(1)
 		}
-		result, err = scanner.ScanConfig(expandedTargets[0])
+		result, err = scanner.ScanConfig(ctx, expandedTargets[0])
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown scan type: %s (valid: tls, ssh, sbom, pki, code, hsm, scap, config, all)\n", scanType)
 		os.Exit(1)
