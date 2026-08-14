@@ -1,0 +1,35 @@
+# Dependabot configuration for the public PQCAT scanner.
+#
+# WHY THIS EXISTS: security ALERTS were already enabled on this repository, which
+# is how 13 advisories (7 critical) against golang.org/x/crypto became visible.
+# Alerts only report. They do not open pull requests, so nothing acted on them and
+# the repository sat on a vulnerable dependency for weeks.
+#
+# The gap is structural rather than an oversight. scripts/sync-public.sh in the
+# private engine explicitly does NOT sync go.mod or go.sum, because the public
+# repository carries fewer dependencies. So when the engine bumped x/crypto, the
+# fix could not propagate here by design, and no mechanism existed to notice.
+#
+# This closes that: version updates now raise PRs here directly, independent of
+# the engine.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - security
+    commit-message:
+      prefix: deps
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+    commit-message:
+      prefix: ci
