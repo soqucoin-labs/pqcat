@@ -410,7 +410,7 @@ func buildTLS13GroupProbe(hostname string, groupID uint16) []byte {
 // to confirm it supports the group.
 func buildKeyShareExtension(groupID uint16) []byte {
 	// Determine the key share size for this group
-	keySize := keyShareSize(groupID)
+	keySize := clientKeyShareSize(groupID)
 
 	// Generate random key share data (we're probing, not negotiating)
 	keyData := make([]byte, keySize)
@@ -460,8 +460,25 @@ func buildKeyShareExtension(groupID uint16) []byte {
 	return ext
 }
 
-// keyShareSize returns the expected key share size for a named group.
-func keyShareSize(groupID uint16) int {
+// clientKeyShareSize returns the size of the key_exchange field a CLIENT sends
+// for a named group.
+//
+// ⚠️ The client and server halves of a hybrid group are DIFFERENT SIZES, and
+// conflating them is the mistake this function used to make. A KEM is not a
+// Diffie-Hellman: the two sides send different objects.
+//
+//	client sends the ENCAPSULATION KEY   ML-KEM-768: 1,184 bytes
+//	server sends the CIPHERTEXT          ML-KEM-768: 1,088 bytes
+//
+// So X25519MLKEM768 is 1,184+32 = 1,216 bytes from the client and 1,088+32 =
+// 1,120 bytes back from the server. This returned 1,120 for the client, which
+// is the server's number, and every caller here builds a ClientHello. A short
+// key share risks a length-checking server rejecting the hello, which the
+// probe would then record as "group not supported" when the group is fine.
+//
+// Sizes are from FIPS 203 (ML-KEM) and the hybrid group drafts. If a new group
+// is added, take the client figure from its draft rather than inferring it.
+func clientKeyShareSize(groupID uint16) int {
 	switch groupID {
 	case 0x0017: // secp256r1 (P-256) — uncompressed point
 		return 65
@@ -473,16 +490,35 @@ func keyShareSize(groupID uint16) int {
 		return 32
 	case 0x001E: // x448
 		return 56
-	case 0x0100, 0x0101, 0x0102: // FFDHE groups — 2048/3072/4096 bit
-		return 256 // 2048-bit DH public value
+	case 0x0100: // ffdhe2048
+		return 256
+	case 0x0101: // ffdhe3072
+		return 384
+	case 0x0102: // ffdhe4096
+		return 512
 	case 0x6399: // X25519Kyber768Draft00
-		return 1120 // 32 (X25519) + 1088 (Kyber768)
+		return 1216 // 32 (X25519) + 1184 (Kyber768 public key)
 	case 0x11EC: // X25519MLKEM768
-		return 1120 // 32 (X25519) + 1088 (ML-KEM-768)
+		return 1216 // 32 (X25519) + 1184 (ML-KEM-768 encapsulation key)
 	case 0x11EB: // SecP256r1MLKEM768
-		return 1153 // 65 (P-256) + 1088 (ML-KEM-768)
+		return 1249 // 65 (P-256) + 1184 (ML-KEM-768 encapsulation key)
 	default:
 		return 32 // Safe default
+	}
+}
+
+// serverKeyShareSize returns the size of the key_exchange field a SERVER
+// returns for a named group. Present so the asymmetry is written down rather
+// than rediscovered: for classical groups the two are equal, for a KEM they
+// are not.
+func serverKeyShareSize(groupID uint16) int {
+	switch groupID {
+	case 0x6399, 0x11EC: // hybrid X25519 + ML-KEM-768 ciphertext
+		return 1120 // 32 + 1088
+	case 0x11EB: // hybrid P-256 + ML-KEM-768 ciphertext
+		return 1153 // 65 + 1088
+	default:
+		return clientKeyShareSize(groupID)
 	}
 }
 

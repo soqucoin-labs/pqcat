@@ -170,6 +170,17 @@ type ServerConfig struct {
 	APIKey     string `yaml:"api_key,omitempty"`     // Required for API access when set
 	RateLimit  int    `yaml:"rate_limit,omitempty"`  // Requests per minute per IP (0=unlimited)
 	CORSOrigin string `yaml:"cors_origin,omitempty"` // Allowed CORS origin ("*" for any)
+
+	// TargetPolicy controls which networks a scan request may target:
+	// "estate" (default: allow private and public, deny link-local),
+	// "public-only" (also deny loopback/private/CGNAT/ULA),
+	// "unrestricted" (no network check; logged at startup).
+	//
+	// Link-local is denied under both non-opt-out policies because it holds the
+	// cloud instance metadata service and never holds cryptographic assets.
+	// Private ranges are allowed by default because scanning your own estate is
+	// what the product is for. See internal/server/target_policy.go.
+	TargetPolicy string `yaml:"target_policy,omitempty"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.
@@ -409,6 +420,9 @@ func mergeConfig(dst, src *Config) {
 	}
 	if src.Server.CORSOrigin != "" {
 		dst.Server.CORSOrigin = src.Server.CORSOrigin
+	}
+	if src.Server.TargetPolicy != "" {
+		dst.Server.TargetPolicy = src.Server.TargetPolicy
 	}
 	// Alerts: previously OMITTED here, so every alerts: block in a config file
 	// was silently discarded and alerts never fired. Merge the whole struct
