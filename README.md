@@ -15,52 +15,89 @@ PQCAT discovers every cryptographic asset across your infrastructure, classifies
 pqcat scan tls agency.gov --framework fisma --html report.html --save-db
 ```
 
+*That line needs Enclave or Pro, which are free to download. The Scanner built
+from this repository does discovery and classification; see Quick Start below.*
+
 **Output:** A scored Crypto Bill of Health with Quantum Vulnerable / Transitional / PQ Compliant zone breakdown, POA&M entries, and framework-specific migration recommendations.
 
-## Two Editions
+## Three builds, and this repository is one of them
 
-| Feature | Enclave (Air-Gapped) | Pro (Connected) |
-|---|---|---|
-| CLI scanner (11 modules + auto-detect) | ✓ | ✓ |
-| Shell completions (bash/zsh/fish) | ✓ | ✓ |
-| System health check (`pqcat doctor`) | ✓ | ✓ |
-| JSON / plain-text output | ✓ | ✓ |
-| TUI terminal dashboard | — | ✓ |
-| Self-contained HTML reports (with TOC) | — | ✓ |
-| SQLite scan history & comparison | — | ✓ |
-| Self-update (`pqcat self-update`) | — | ✓ |
-| REST API + web dashboard | — | ✓ |
-| 4 persona views (CISO/Auditor/CIO/Exec) | — | ✓ |
-| Notification center | — | ✓ |
-| Role-based access control (RBAC) | — | ✓ |
-| User management & HMAC audit logging | — | ✓ |
-| Branded PDF reports (logo, cover page) | — | ✓ |
-| Prometheus observability (`/metrics`) | — | ✓ |
-| ML-DSA-44 report seals (FIPS 204) | — | ✓ |
-| Scheduled scans & alert webhooks | — | ✓ |
-| Confidential Compliance Engine (CCE) | — | ✓ |
-| Section 508 / WCAG 2.1 AA accessible | — | ✓ |
+⚠️ **Building this repository gives you the Scanner, which is neither of the
+other two.** The Scanner is the Apache-2.0 open-source build: discovery and
+classification. It has no scoring, no reports and no evidence layer, and every
+flag belonging to those exits with a message saying so.
 
-Both editions are built from this codebase. The Enclave edition compiles with **zero network code** beyond scan targets — guaranteed by the compiler. Features marked Pro require the proprietary compliance engine (pre-built binaries from [GitHub Releases](https://github.com/soqucoin-labs/pqcat/releases)).
+Enclave and Pro are pre-built and downloadable from
+[the public release](https://github.com/soqucoin-labs/pqcat/releases/latest).
+Enclave is the free product: every capability, bounded by a 25-host scope limit
+per scan until you license it.
+
+| Feature | Scanner (this repo) | Enclave | Pro |
+|---|---|---|---|
+| CLI scanning + classification | ✓ | ✓ | ✓ |
+| JSON / plain-text output | ✓ | ✓ | ✓ |
+| Shell completions (bash/zsh/fish) | ✓ | ✓ | ✓ |
+| System health check (`pqcat doctor`) | — | ✓ | ✓ |
+| Compliance scoring + frameworks | — | ✓ | ✓ |
+| Self-contained HTML and PDF reports | — | ✓ | ✓ |
+| SQLite scan history & comparison | — | ✓ | ✓ |
+| Evidence layer (coins, binding, disclosure) | — | ✓ | ✓ |
+| TUI terminal dashboard | — | ✓ | ✓ |
+| Update check (`pqcat update`) | — | ✓ | ✓ |
+| REST API + web dashboard | — | — | ✓ |
+| 4 persona views (CISO/Auditor/CIO/Exec) | — | — | ✓ |
+| Notification center | — | — | ✓ |
+| Role-based access control (RBAC) | — | — | ✓ |
+| User management & HMAC audit logging | — | — | ✓ |
+| Branded PDF reports (logo, cover page) | — | — | ✓ |
+| Prometheus observability (`/metrics`) | — | — | ✓ |
+| ML-DSA-44 report seals (FIPS 204) | — | — | ✓ |
+| Scheduled scans & alert webhooks | — | — | ✓ |
+| Confidential Compliance Engine (CCE) | — | — | ✓ |
+| Section 508 / WCAG 2.1 AA accessible | — | — | ✓ |
+
+All three builds come off one engine, and the Scanner's source is what lives
+here. Enclave compiles with **zero network code** beyond scan targets, which the
+compiler guarantees rather than a setting: there is no server in the binary to
+turn off. Pro adds that server. Both carry the proprietary compliance engine and
+are [published as pre-built binaries](https://github.com/soqucoin-labs/pqcat/releases/latest)
+alongside the Scanner archives.
 
 ## Quick Start
 
+Everything here runs on the build this repository produces. Commands that need
+Enclave or Pro are in the section below, kept separate on purpose: they exit
+with an error on a Scanner build, and a quick start whose first command fails is
+worse than no quick start.
+
 ```bash
-# Build
+# Build the Scanner
 make
 
 # Scan (auto-deep for single targets)
-./pqcat scan tls example.com --framework fisma
+./pqcat scan tls example.com
 
-# Full assessment with report
-./pqcat scan tls example.com --framework fisma --html cboh.html --save-db
+# Machine-readable output
+./pqcat scan tls example.com --json
 
-# Terminal dashboard
-./pqcat dashboard
-
-# Generate org config
+# Generate an org config template
 ./pqcat config init
 ```
+
+### The same scan, with scoring and a report
+
+Scoring, frameworks, reports and the evidence layer are not compiled into the
+Scanner. Download Enclave, which is free, and the same target produces a scored
+Crypto Bill of Health:
+
+```bash
+# From https://github.com/soqucoin-labs/pqcat/releases/latest
+pqcat scan tls example.com --framework fisma --html cboh.html --save-db
+```
+
+Unlicensed Enclave covers up to 25 hosts per scan. `pqcat license trial` starts a
+free 14-day evaluation that raises it, needs no registration, and validates
+offline.
 
 ## Scanner Modules
 
