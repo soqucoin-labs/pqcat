@@ -63,5 +63,5 @@ The compliance engine is proprietary. Security issues in both are covered by thi
 ## Contact
 
 **Soqucoin Labs Inc.**  
-228 Park Ave S, Pmb 85451, New York, NY 10003  
+30 N Gould St, Ste 69171, Sheridan, WY 82801  
 security@soqu.org
