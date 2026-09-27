@@ -913,6 +913,6 @@ stateDiagram-v2
 ---
 
 **Soqucoin Labs Inc.**  
-228 Park Ave S, Pmb 85451  
-New York, NY 10003  
+30 N Gould St, Ste 69171  
+Sheridan, WY 82801  
 labs@soqu.org · soqucoin.com
